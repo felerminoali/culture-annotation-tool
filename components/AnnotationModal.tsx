@@ -16,6 +16,8 @@ interface AnnotationModalProps {
   ) => void;
   selection: SelectionState | null;
   editingAnnotation?: Annotation | null;
+  language: Language;
+  projectGuideline?: string;
 }
 
 const AnnotationModal: React.FC<AnnotationModalProps> = ({
@@ -24,9 +26,11 @@ const AnnotationModal: React.FC<AnnotationModalProps> = ({
   onSave,
   selection,
   editingAnnotation,
-  language
+  language,
+  projectGuideline
 }) => {
   const [comment, setComment] = useState('');
+  const [showGuidelines, setShowGuidelines] = useState(false);
   const [isImportant, setIsImportant] = useState(false);
   const [isRelevant, setIsRelevant] = useState<DecisionStatus>('na');
   const [relevantJustification, setRelevantJustification] = useState('');
@@ -114,6 +118,36 @@ const AnnotationModal: React.FC<AnnotationModalProps> = ({
               "{displaySelection}"
             </div>
           </div>
+
+          {projectGuideline && (
+            <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm transition-all">
+              <button
+                onClick={() => setShowGuidelines(!showGuidelines)}
+                className="w-full px-5 py-3 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors"
+                type="button"
+              >
+                <div className="flex items-center space-x-2">
+                  <i className="fa-solid fa-book-open text-indigo-500 text-[10px]"></i>
+                  <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">{t('view_guidelines', language)}</span>
+                </div>
+                <i className={`fa-solid fa-chevron-${showGuidelines ? 'up' : 'down'} text-[10px] text-slate-400 transition-transform`}></i>
+              </button>
+              {showGuidelines && (
+                <div className="p-5 border-t border-slate-100 animate-in slide-in-from-top-2 duration-300">
+                  <div className="guideline-html-content text-xs text-slate-600 leading-relaxed prose prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: projectGuideline }} />
+                  <style>{`
+                    .guideline-html-content h1 { font-size: 1.1rem; font-weight: 800; margin-bottom: 0.5rem; }
+                    .guideline-html-content h2 { font-size: 1rem; font-weight: 700; margin-bottom: 0.4rem; margin-top: 1rem; }
+                    .guideline-html-content h3 { font-size: 0.9rem; font-weight: 600; margin-bottom: 0.3rem; margin-top: 0.8rem; }
+                    .guideline-html-content p { margin-bottom: 0.75rem; }
+                    .guideline-html-content ul, .guideline-html-content ol { margin-bottom: 0.75rem; padding-left: 1.25rem; }
+                    .guideline-html-content li { margin-bottom: 0.2rem; }
+                    .guideline-html-content strong { font-weight: 700; color: #1e293b; }
+                  `}</style>
+                </div>
+              )}
+            </div>
+          )}
 
           {renderDecisionGroup(t("is_relevant", language), isRelevant, setIsRelevant, relevantJustification, setRelevantJustification)}
           {renderDecisionGroup(t("is_supported", language), isSupported, setIsSupported, supportedJustification, setSupportedJustification)}

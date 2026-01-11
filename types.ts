@@ -26,6 +26,14 @@ export interface Annotation {
   supportedJustification?: string;
 }
 
+export interface TaskData {
+  annotations: Annotation[];
+  imageAnnotations: Record<string, ImageAnnotation[]>;
+  culturalScore: number;
+  languageSimilarity: DecisionStatus;
+  languageSimilarityJustification: string;
+}
+
 export type DecisionStatus = 'yes' | 'no' | 'na';
 export type ShapeType = 'rect' | 'circle';
 
@@ -61,6 +69,7 @@ export interface Project {
   id: string;
   title: string;
   description: string;
+  guideline?: string;
   createdAt: number;
 }
 

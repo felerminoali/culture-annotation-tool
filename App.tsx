@@ -48,6 +48,9 @@ const App: React.FC = () => {
   // App Data State (Task Specific)
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [imageAnnotations, setImageAnnotations] = useState<Record<string, ImageAnnotation[]>>({});
+  const [culturalScore, setCulturalScore] = useState<number>(0);
+  const [languageSimilarity, setLanguageSimilarity] = useState<DecisionStatus>('na');
+  const [languageSimilarityJustification, setLanguageSimilarityJustification] = useState<string>('');
 
   // UI Modal State
   const [currentSelection, setCurrentSelection] = useState<SelectionState | null>(null);
@@ -175,9 +178,18 @@ const App: React.FC = () => {
           const parsed = JSON.parse(savedData) as Record<string, any>;
           setCompletedTaskIds(parsed.completedTaskIds || []);
 
-          const taskData = parsed[currentTask.id] || { annotations: [], imageAnnotations: {} };
+          const taskData = parsed[currentTask.id] || {
+            annotations: [],
+            imageAnnotations: {},
+            culturalScore: 0,
+            languageSimilarity: 'na',
+            languageSimilarityJustification: ''
+          };
           setAnnotations(taskData.annotations || []);
           setImageAnnotations(taskData.imageAnnotations || {});
+          setCulturalScore(taskData.culturalScore || 0);
+          setLanguageSimilarity(taskData.languageSimilarity || 'na');
+          setLanguageSimilarityJustification(taskData.languageSimilarityJustification || '');
         } catch (e) {
           console.error("Failed to parse user data", e);
         }
@@ -197,13 +209,19 @@ const App: React.FC = () => {
       let allUserData = savedDataStr ? JSON.parse(savedDataStr) as Record<string, any> : {};
 
       allUserData.completedTaskIds = completedTaskIds;
-      allUserData[currentTask.id] = { annotations, imageAnnotations };
+      allUserData[currentTask.id] = {
+        annotations,
+        imageAnnotations,
+        culturalScore,
+        languageSimilarity,
+        languageSimilarityJustification
+      };
       localStorage.setItem(storageKey, JSON.stringify(allUserData));
 
       const taggedAnnos = annotations.map(a => ({ ...a, userEmail: currentUser.email, taskId: currentTask.id }));
       syncGlobalLog(currentUser.email, currentTask.id, taggedAnnos);
     }
-  }, [annotations, imageAnnotations, completedTaskIds, isAuthenticated, currentUser, currentTaskIndex, currentTask?.id]);
+  }, [annotations, imageAnnotations, culturalScore, languageSimilarity, languageSimilarityJustification, completedTaskIds, isAuthenticated, currentUser, currentTaskIndex, currentTask?.id]);
 
   useEffect(() => {
     localStorage.setItem('annotate_language', language);
@@ -363,13 +381,16 @@ const App: React.FC = () => {
     const projectTasks = tasks.filter(t => t.projectId === projectId);
 
     // Format tasks to include paragraphs list and audio placeholder
-    const formattedTasks = projectTasks.map(t => ({
-      ...t,
-      // Split by double newline or similar to robustly detect paragraphs. The app uses \n\s*\n usually.
-      paragraphs: t.text.split(/\n\s*\n/).filter(p => p.trim() !== ""),
-      // Use actual audio or empty list
-      audio: t.audio || []
-    }));
+    const formattedTasks = projectTasks.map(t => {
+      const paragraphs = t.text.split(/\n\s*\n/).filter(p => p.trim() !== "");
+      return {
+        ...t,
+        paragraphs,
+        paragrah_number: paragraphs.length,
+        image_number: t.images?.length || 0,
+        audio: t.audio || []
+      };
+    });
 
     const annotatorUsers = users.filter(u => u.role === 'annotator');
 
@@ -389,7 +410,39 @@ const App: React.FC = () => {
 
           projectTasks.forEach(task => {
             if (userData[task.id]) {
-              (userExportData.taskData as any)[task.id] = userData[task.id];
+              const taskData = { ...userData[task.id] };
+
+              const taskParagraphs = task.text.split(/\n\s*\n/).filter(p => p.trim() !== "").map((p, idx) => {
+                // We need to re-find the offsets to match the App's paragraph logic
+                const index = task.text.indexOf(p);
+                return { text: p, offset: index };
+              });
+
+              // Process text annotations to add paragraph index
+              if (taskData.annotations) {
+                taskData.annotations = taskData.annotations.map((anno: any) => {
+                  const paraIdx = taskParagraphs.findIndex(p => anno.start >= p.offset && anno.end <= p.offset + p.text.length);
+                  return {
+                    ...anno,
+                    paragraph: paraIdx !== -1 ? paraIdx + 1 : undefined
+                  };
+                });
+              }
+
+              // Process image annotations to add image/paragraph index
+              if (taskData.imageAnnotations) {
+                const processedImages: Record<string, any[]> = {};
+                Object.entries(taskData.imageAnnotations).forEach(([idx, annos]) => {
+                  processedImages[idx] = (annos as any[]).map(a => ({
+                    ...a,
+                    paragraph: parseInt(idx) + 1,
+                    image_number: parseInt(idx) + 1 // Assuming 1:1 paragraph to image mapping as per current UI
+                  }));
+                });
+                taskData.imageAnnotations = processedImages;
+              }
+
+              (userExportData.taskData as any)[task.id] = taskData;
             }
           });
 
@@ -538,7 +591,10 @@ const App: React.FC = () => {
 
           userData[tid] = {
             annotations: mergedAnnos,
-            imageAnnotations: mergedImgAnnos
+            imageAnnotations: mergedImgAnnos,
+            culturalScore: tData.culturalScore || 0,
+            languageSimilarity: tData.languageSimilarity || 'na',
+            languageSimilarityJustification: tData.languageSimilarityJustification || ''
           };
         });
 
@@ -611,6 +667,9 @@ const App: React.FC = () => {
     setCurrentUser(null);
     setAnnotations([]);
     setImageAnnotations({});
+    setCulturalScore(0);
+    setLanguageSimilarity('na');
+    setLanguageSimilarityJustification('');
     setCompletedTaskIds([]);
     setCurrentTaskIndex(0);
     setFormData({ name: '', email: '', password: '', confirmPassword: '', role: 'annotator' });
@@ -1289,6 +1348,139 @@ const App: React.FC = () => {
                     ))}
                   </div>
 
+                  {/* CULTURAL ALIGNMENT SCORING */}
+                  <div className="pt-32 pb-16 max-w-4xl mx-auto">
+                    <div className="bg-white rounded-[4rem] border border-slate-100 shadow-2xl p-16 space-y-12 animate-in slide-in-from-bottom-8">
+                      <div className="text-center space-y-4">
+                        <h3 className="text-3xl font-black text-slate-900 italic tracking-tight">
+                          {t('score_question', language)}
+                        </h3>
+                        <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">
+                          {t('cultural_score', language)}
+                        </p>
+                      </div>
+
+                      <div className="space-y-12">
+                        {/* Range Meter */}
+                        <div className="relative pt-12 pb-8 px-4">
+                          <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            value={culturalScore}
+                            onChange={(e) => setCulturalScore(parseInt(e.target.value))}
+                            className="w-full h-4 bg-slate-100 rounded-full appearance-none cursor-pointer accent-indigo-600"
+                          />
+                          <div className="absolute top-0 left-0 w-full flex justify-between px-4">
+                            <div className="flex flex-col items-center">
+                              <span className="text-[10px] font-black text-slate-400">0</span>
+                              <div className="w-0.5 h-2 bg-slate-200 mt-1"></div>
+                            </div>
+                            <div className="flex flex-col items-center">
+                              <span className="text-[10px] font-black text-slate-400">25</span>
+                              <div className="w-0.5 h-2 bg-slate-200 mt-1"></div>
+                            </div>
+                            <div className="flex flex-col items-center">
+                              <span className="text-[10px] font-black text-slate-400">50</span>
+                              <div className="w-0.5 h-2 bg-slate-200 mt-1"></div>
+                            </div>
+                            <div className="flex flex-col items-center">
+                              <span className="text-[10px] font-black text-slate-400">75</span>
+                              <div className="w-0.5 h-2 bg-slate-200 mt-1"></div>
+                            </div>
+                            <div className="flex flex-col items-center">
+                              <span className="text-[10px] font-black text-slate-400">100</span>
+                              <div className="w-0.5 h-2 bg-slate-200 mt-1"></div>
+                            </div>
+                          </div>
+                          <div className="text-center mt-8">
+                            <span className="text-7xl font-black text-indigo-600 italic tracking-tighter">
+                              {culturalScore}
+                            </span>
+                            <span className="text-2xl font-black text-slate-300 ml-2">%</span>
+                          </div>
+                        </div>
+
+                        {/* Scoring Guide Display */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center bg-slate-50/50 p-10 rounded-[3rem] border border-slate-100">
+                          <div className="space-y-4">
+                            <h4 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] flex items-center">
+                              <i className="fa-solid fa-circle-info mr-3 text-indigo-500"></i>
+                              {t('scoring_guide_title', language)}
+                            </h4>
+                            <div className="space-y-1">
+                              <p className={`text-xs font-bold transition-all ${culturalScore === 0 ? 'text-indigo-600 scale-105 origin-left' : 'text-slate-400 opacity-60'}`}>0: {t('score_0', language)}</p>
+                              <p className={`text-xs font-bold transition-all ${culturalScore > 0 && culturalScore <= 20 ? 'text-indigo-600 scale-105 origin-left' : 'text-slate-400 opacity-60'}`}>1-20: {t('score_1_20', language)}</p>
+                              <p className={`text-xs font-bold transition-all ${culturalScore > 20 && culturalScore <= 40 ? 'text-indigo-600 scale-105 origin-left' : 'text-slate-400 opacity-60'}`}>21-40: {t('score_21_40', language)}</p>
+                              <p className={`text-xs font-bold transition-all ${culturalScore > 40 && culturalScore <= 60 ? 'text-indigo-600 scale-105 origin-left' : 'text-slate-400 opacity-60'}`}>41-60: {t('score_41_60', language)}</p>
+                              <p className={`text-xs font-bold transition-all ${culturalScore > 60 && culturalScore <= 80 ? 'text-indigo-600 scale-105 origin-left' : 'text-slate-400 opacity-60'}`}>61-80: {t('score_61_80', language)}</p>
+                              <p className={`text-xs font-bold transition-all ${culturalScore > 80 && culturalScore <= 100 ? 'text-indigo-600 scale-105 origin-left' : 'text-slate-400 opacity-60'}`}>81-100: {t('score_81_100', language)}</p>
+                            </div>
+                          </div>
+                          <div className="flex flex-col items-center justify-center p-8 bg-white rounded-[2.5rem] shadow-xl border border-slate-100">
+                            <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center mb-4">
+                              <i className={`fa-solid ${culturalScore > 60 ? 'fa-face-laugh-beam text-emerald-500' : culturalScore > 20 ? 'fa-face-smile text-amber-500' : 'fa-face-meh text-slate-400'} text-3xl`}></i>
+                            </div>
+                            <p className="text-sm font-black text-slate-900 italic">
+                              {culturalScore === 0 ? t('score_0', language) :
+                                culturalScore <= 20 ? t('score_1_20', language) :
+                                  culturalScore <= 40 ? t('score_21_40', language) :
+                                    culturalScore <= 60 ? t('score_41_60', language) :
+                                      culturalScore <= 80 ? t('score_61_80', language) : t('score_81_100', language)}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* LANGUAGE SIMILARITY QUESTION */}
+                  <div className="pb-16 max-w-4xl mx-auto">
+                    <div className="bg-white rounded-[4rem] border border-slate-100 shadow-2xl p-16 space-y-12 animate-in slide-in-from-bottom-8">
+                      <div className="text-center space-y-4">
+                        <h3 className="text-3xl font-black text-slate-900 italic tracking-tight">
+                          {t('language_similarity_question', language)}
+                        </h3>
+                        <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">
+                          {t('language_similarity_label', language)}
+                        </p>
+                      </div>
+
+                      <div className="space-y-10">
+                        <div className="flex justify-center space-x-6">
+                          {(['yes', 'no'] as DecisionStatus[]).map((status) => (
+                            <button
+                              key={status}
+                              onClick={() => setLanguageSimilarity(status)}
+                              className={`px-12 py-6 rounded-3xl text-sm font-black uppercase tracking-widest transition-all shadow-lg active:scale-95 border-b-4 ${languageSimilarity === status
+                                ? 'bg-indigo-600 text-white border-indigo-900 shadow-indigo-200'
+                                : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'
+                                }`}
+                            >
+                              <i className={`fa-solid fa-circle-${status === 'yes' ? 'check' : 'xmark'} mr-2`}></i>
+                              {status === 'yes' ? 'Yes' : 'No'}
+                            </button>
+                          ))}
+                        </div>
+
+                        {languageSimilarity === 'no' && (
+                          <div className="animate-in slide-in-from-top-4 duration-300">
+                            <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 px-4">
+                              {t('why_justification', language)}
+                            </label>
+                            <textarea
+                              className="w-full p-8 bg-red-50/30 border border-red-100 rounded-[2.5rem] font-medium text-slate-700 focus:ring-4 focus:ring-red-100 outline-none transition-all"
+                              rows={4}
+                              placeholder={t('missing_placeholder', language)}
+                              value={languageSimilarityJustification}
+                              onChange={(e) => setLanguageSimilarityJustification(e.target.value)}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Submission Footer Actions */}
                   <div className="pt-24 flex flex-col items-center">
 
@@ -1334,9 +1526,29 @@ const App: React.FC = () => {
         </main >
       </div >
 
-      <AnnotationModal isOpen={isTextModalOpen} onClose={() => setIsTextModalOpen(false)} onSave={saveTextAnnotation} selection={currentSelection} editingAnnotation={editingTextAnnotation} language={language} />
-      <ImageAnnotationModal isOpen={isImageModalOpen} onClose={() => setIsImageModalOpen(false)} onSave={saveImageAnnotation} existingAnnotation={editingImageAnno} language={language} />
-      <GuidelinesModal isOpen={isGuidelinesModalOpen} onClose={() => setIsGuidelinesModalOpen(false)} language={language} />
+      <AnnotationModal
+        isOpen={isTextModalOpen}
+        onClose={() => setIsTextModalOpen(false)}
+        onSave={saveTextAnnotation}
+        selection={currentSelection}
+        editingAnnotation={editingTextAnnotation}
+        language={language}
+        projectGuideline={projects.find(p => p.id === currentTask?.projectId)?.guideline}
+      />
+      <ImageAnnotationModal
+        isOpen={isImageModalOpen}
+        onClose={() => setIsImageModalOpen(false)}
+        onSave={saveImageAnnotation}
+        existingAnnotation={editingImageAnno}
+        language={language}
+        projectGuideline={projects.find(p => p.id === currentTask?.projectId)?.guideline}
+      />
+      <GuidelinesModal
+        isOpen={isGuidelinesModalOpen}
+        onClose={() => setIsGuidelinesModalOpen(false)}
+        language={language}
+        projectGuideline={projects.find(p => p.id === currentTask?.projectId)?.guideline}
+      />
       <ProfileModal
         isOpen={isProfileModalOpen}
         onClose={() => setIsProfileModalOpen(false)}

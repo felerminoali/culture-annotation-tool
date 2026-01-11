@@ -9,6 +9,7 @@ interface ImageAnnotationModalProps {
   onSave: (data: Omit<ImageAnnotation, 'id' | 'x' | 'y' | 'width' | 'height' | 'timestamp'>) => void;
   existingAnnotation?: ImageAnnotation | null;
   language: Language;
+  projectGuideline?: string;
 }
 
 const ImageAnnotationModal: React.FC<ImageAnnotationModalProps> = ({
@@ -16,9 +17,11 @@ const ImageAnnotationModal: React.FC<ImageAnnotationModalProps> = ({
   onClose,
   onSave,
   existingAnnotation,
-  language
+  language,
+  projectGuideline
 }) => {
   const [description, setDescription] = useState('');
+  const [showGuidelines, setShowGuidelines] = useState(false);
   const [isPresent, setIsPresent] = useState<DecisionStatus>('yes');
   const [presentJustification, setPresentJustification] = useState('');
   const [isRelevant, setIsRelevant] = useState<DecisionStatus>('yes');
@@ -72,6 +75,35 @@ const ImageAnnotationModal: React.FC<ImageAnnotationModalProps> = ({
               onChange={(e) => setDescription(e.target.value)}
             />
           </section>
+
+          {projectGuideline && (
+            <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm transition-all mb-4">
+              <button
+                onClick={() => setShowGuidelines(!showGuidelines)}
+                className="w-full px-5 py-2.5 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors"
+                type="button"
+              >
+                <div className="flex items-center space-x-2">
+                  <i className="fa-solid fa-book-open text-indigo-500 text-[10px]"></i>
+                  <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">{t('view_guidelines', language)}</span>
+                </div>
+                <i className={`fa-solid fa-chevron-${showGuidelines ? 'up' : 'down'} text-[10px] text-slate-400 transition-transform`}></i>
+              </button>
+              {showGuidelines && (
+                <div className="p-4 border-t border-slate-100 animate-in slide-in-from-top-2 duration-300">
+                  <div className="guideline-html-content text-xs text-slate-600 leading-relaxed max-w-none" dangerouslySetInnerHTML={{ __html: projectGuideline }} />
+                  <style>{`
+                    .guideline-html-content h1 { font-size: 1rem; font-weight: 800; margin-bottom: 0.4rem; }
+                    .guideline-html-content h2 { font-size: 0.9rem; font-weight: 700; margin-bottom: 0.3rem; margin-top: 0.8rem; }
+                    .guideline-html-content h3 { font-size: 0.85rem; font-weight: 600; margin-bottom: 0.2rem; margin-top: 0.6rem; }
+                    .guideline-html-content p { margin-bottom: 0.5rem; }
+                    .guideline-html-content ul, .guideline-html-content ol { margin-bottom: 0.5rem; padding-left: 1rem; }
+                    .guideline-html-content li { margin-bottom: 0.15rem; }
+                  `}</style>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Shape Type Toggle */}
           <section className="space-y-3 pt-4 border-t border-gray-100">

@@ -1,5 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
+import ReactQuill from 'react-quill-new';
+import 'react-quill-new/dist/quill.snow.css';
 import { User, Annotation, TaskAssignment, Task, UserRole, Project, ProjectAssignment, DecisionStatus, Language } from '../types';
 import { t } from '../services/i18n';
 
@@ -86,7 +88,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Project Management
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
-  const [projectForm, setProjectForm] = useState({ title: '', description: '' });
+  const [projectForm, setProjectForm] = useState({ title: '', description: '', guideline: '' });
   const [selectedProjectFilter, setSelectedProjectFilter] = useState<string>('all');
 
   // Bulk Actions
@@ -146,10 +148,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const openProjectModal = (project?: Project) => {
     if (project) {
       setEditingProject(project);
-      setProjectForm({ title: project.title, description: project.description });
+      setProjectForm({ title: project.title, description: project.description, guideline: project.guideline || '' });
     } else {
       setEditingProject(null);
-      setProjectForm({ title: '', description: '' });
+      setProjectForm({ title: '', description: '', guideline: '' });
     }
     setIsProjectModalOpen(true);
   };
@@ -800,7 +802,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* PROJECT MODAL */}
       {isProjectModalOpen && (
         <div className="fixed inset-0 z-[5000] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in duration-300">
-          <div className="bg-white w-full max-w-lg rounded-[3.5rem] shadow-2xl p-12 space-y-8 animate-in zoom-in duration-300">
+          <div className="bg-white w-full max-w-3xl rounded-[3.5rem] shadow-2xl p-12 space-y-8 animate-in zoom-in duration-300 max-h-[90vh] overflow-y-auto">
             <h3 className="text-3xl font-black text-slate-900 italic tracking-tight">{editingProject ? t('edit_project', language) : t('new_project', language)}</h3>
             <div className="space-y-6">
               <div>
@@ -809,9 +811,65 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
               <div>
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">{t('project_description', language)}</label>
-                <textarea value={projectForm.description} onChange={e => setProjectForm({ ...projectForm, description: e.target.value })} className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none text-sm font-medium shadow-inner h-32" placeholder={t('project_description', language)} />
+                <textarea value={projectForm.description} onChange={e => setProjectForm({ ...projectForm, description: e.target.value })} className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none text-sm font-medium shadow-inner h-24" placeholder={t('project_description', language)} />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">{t('project_guideline', language)}</label>
+                <div className="rounded-2xl border border-slate-200 overflow-hidden shadow-inner bg-slate-50">
+                  <ReactQuill
+                    theme="snow"
+                    value={projectForm.guideline}
+                    onChange={val => setProjectForm({ ...projectForm, guideline: val })}
+                    className="bg-white"
+                    placeholder={t('project_guideline', language)}
+                  />
+                </div>
               </div>
             </div>
+
+            <style>{`
+              .ql-container {
+                border-bottom-left-radius: 1rem;
+                border-bottom-right-radius: 1rem;
+                border: none !important;
+                font-family: inherit;
+                font-size: 0.875rem;
+              }
+              .ql-toolbar {
+                border-top-left-radius: 1rem;
+                border-top-right-radius: 1rem;
+                border: none !important;
+                border-bottom: 1px solid #e2e8f0 !important;
+                background: #f8fafc;
+                padding: 0.75rem !important;
+              }
+              .ql-editor {
+                min-height: 180px;
+                padding: 1.25rem !important;
+                color: #1e293b;
+                line-height: 1.6;
+              }
+              .ql-editor.ql-blank::before {
+                left: 1.25rem !important;
+                font-style: normal;
+                color: #94a3b8;
+                font-weight: 500;
+              }
+              .ql-snow .ql-stroke {
+                stroke: #64748b;
+              }
+              .ql-snow .ql-fill {
+                fill: #64748b;
+              }
+              .ql-snow.ql-toolbar button:hover .ql-stroke,
+              .ql-snow.ql-toolbar button:hover .ql-fill,
+              .ql-snow.ql-toolbar button.ql-active .ql-stroke,
+              .ql-snow.ql-toolbar button.ql-active .ql-fill {
+                stroke: #6366f1;
+                fill: #6366f1;
+              }
+            `}</style>
+
             <div className="flex justify-end space-x-4 pt-4">
               <button onClick={() => setIsProjectModalOpen(false)} className="px-8 py-4 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-all font-bold">{t('cancel', language)}</button>
               <button onClick={saveProject} className="px-10 py-4 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 shadow-xl active:scale-95 border-b-4 border-indigo-900">{t('confirm_save', language)}</button>
