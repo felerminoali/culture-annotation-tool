@@ -19,7 +19,7 @@ const App: React.FC = () => {
   const [isRegistering, setIsRegistering] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [viewMode, setViewMode] = useState<'workspace' | 'admin'>('workspace');
-  const [adminTab, setAdminTab] = useState<'users' | 'tasks' | 'annotations' | 'projects'>('users');
+  const [adminTab, setAdminTab] = useState<'users' | 'tasks' | 'annotations' | 'projects' | 'agreement'>('users');
   const [language, setLanguage] = useState<Language>('en');
 
   // Platform Resources
@@ -1022,6 +1022,7 @@ const App: React.FC = () => {
                   <button onClick={() => setAdminTab('tasks')} title="Tasks" className={`p-3 rounded-xl transition-all ${adminTab === 'tasks' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-50'}`}><i className="fa-solid fa-list-check"></i></button>
                   <button onClick={() => setAdminTab('annotations')} title="Ground Truth" className={`p-3 rounded-xl transition-all ${adminTab === 'annotations' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-50'}`}><i className="fa-solid fa-database"></i></button>
                   <button onClick={() => setAdminTab('projects')} title="Projects" className={`p-3 rounded-xl transition-all ${adminTab === 'projects' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-50'}`}><i className="fa-solid fa-folder-open"></i></button>
+                  <button onClick={() => setAdminTab('agreement')} title="Agreement" className={`p-3 rounded-xl transition-all ${adminTab === 'agreement' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-50'}`}><i className="fa-solid fa-users-viewfinder"></i></button>
                 </>
               )}
               {viewMode === 'workspace' && (
@@ -1053,6 +1054,9 @@ const App: React.FC = () => {
                   </button>
                   <button onClick={() => setAdminTab('projects')} className={`w-full flex items-center px-4 py-3.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${adminTab === 'projects' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}>
                     <i className="fa-solid fa-folder-open mr-3 text-sm"></i> {t('projects_tab', language)}
+                  </button>
+                  <button onClick={() => setAdminTab('agreement')} className={`w-full flex items-center px-4 py-3.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${adminTab === 'agreement' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}>
+                    <i className="fa-solid fa-users-viewfinder mr-3 text-sm"></i> {t('agreement_tab', language)}
                   </button>
                 </div>
               ) : (

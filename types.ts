@@ -85,6 +85,7 @@ export interface Task {
   question?: string;
   category?: 'diet' | 'exercise';
   gender?: 'male' | 'female' | 'other';
+  taskType?: 'independent' | 'overlapped';
 }
 
 export interface ProjectAssignment {

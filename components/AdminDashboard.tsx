@@ -7,7 +7,7 @@ import { t } from '../services/i18n';
 
 
 interface AdminDashboardProps {
-  activeTab: 'users' | 'tasks' | 'annotations' | 'projects';
+  activeTab: 'users' | 'tasks' | 'annotations' | 'projects' | 'agreement';
   users: User[];
   allAnnotations: Annotation[];
   assignments: TaskAssignment[];
@@ -98,6 +98,174 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Task Management
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+
+  // Agreement State
+  const [selectedAgrProject, setSelectedAgrProject] = useState<string>('');
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  const [agreementResult, setAgreementResult] = useState<{
+    taskAgreements: { taskId: string, taskTitle: string, mean: number, stdDev: number, agreement: number }[],
+    overallAgreement: number,
+    icc?: number,
+    pearson?: number,
+    spearman?: number
+  } | null>(null);
+
+  // --- Statistical Helpers ---
+  const calculatePearson = (s1: number[], s2: number[]) => {
+    const n = s1.length;
+    if (n < 2) return 0;
+    const mean1 = s1.reduce((a, b) => a + b, 0) / n;
+    const mean2 = s2.reduce((a, b) => a + b, 0) / n;
+    let num = 0, den1 = 0, den2 = 0;
+    for (let i = 0; i < n; i++) {
+      num += (s1[i] - mean1) * (s2[i] - mean2);
+      den1 += Math.pow(s1[i] - mean1, 2);
+      den2 += Math.pow(s2[i] - mean2, 2);
+    }
+    const den = Math.sqrt(den1 * den2);
+    return den === 0 ? 0 : num / den;
+  };
+
+  const calculateSpearman = (s1: number[], s2: number[]) => {
+    const getRanks = (arr: number[]) => {
+      const sorted = [...arr].map((val, i) => ({ val, i })).sort((a, b) => a.val - b.val);
+      const ranks = new Array(arr.length);
+      for (let i = 0; i < sorted.length; i++) {
+        let j = i;
+        while (j < sorted.length - 1 && sorted[j + 1].val === sorted[i].val) j++;
+        const meanRank = (i + j) / 2 + 1;
+        for (let k = i; k <= j; k++) ranks[sorted[k].i] = meanRank;
+        i = j;
+      }
+      return ranks;
+    };
+    return calculatePearson(getRanks(s1), getRanks(s2));
+  };
+
+  const calculateICC = (matrix: number[][]) => {
+    // ICC(1,1) implementation
+    const k = matrix[0].length; // num raters
+    const n = matrix.length;    // num tasks
+    if (n < 2 || k < 2) return 0;
+
+    const rowMeans = matrix.map(row => row.reduce((a, b) => a + b, 0) / k);
+    const grandMean = rowMeans.reduce((a, b) => a + b, 0) / n;
+
+    let ssTotal = 0;
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < k; j++) {
+        ssTotal += Math.pow(matrix[i][j] - grandMean, 2);
+      }
+    }
+
+    let ssBetween = 0;
+    for (let i = 0; i < n; i++) {
+      ssBetween += Math.pow(rowMeans[i] - grandMean, 2);
+    }
+    ssBetween *= k;
+
+    const ssWithin = ssTotal - ssBetween;
+    const msBetween = ssBetween / (n - 1);
+    const msWithin = ssWithin / (n * (k - 1));
+
+    const icc = (msBetween - msWithin) / (msBetween + (k - 1) * msWithin);
+    return isNaN(icc) ? 0 : icc;
+  };
+
+  const getEligibleUsers = (projectId: string) => {
+    if (!projectId) return [];
+    const overlappedTasks = tasks.filter(t => t.projectId === projectId && t.taskType === 'overlapped');
+    if (overlappedTasks.length === 0) return [];
+
+    return users.filter(user => {
+      if (user.role !== 'annotator' && user.role !== 'admin') return false;
+      const key = `annotate_data_${user.email}`;
+      const userDataStr = localStorage.getItem(key);
+      if (!userDataStr) return false;
+      try {
+        const userData = JSON.parse(userDataStr);
+        const completedCount = overlappedTasks.filter(t => userData.completedTaskIds?.includes(t.id)).length;
+        return completedCount === overlappedTasks.length;
+      } catch {
+        return false;
+      }
+    });
+  };
+
+  const computeAgreement = () => {
+    if (!selectedAgrProject || selectedUsers.length < 2) return;
+    const overlappedTasks = tasks.filter(t => t.projectId === selectedAgrProject && t.taskType === 'overlapped');
+
+    // Matrix for ICC: [tasks][raters]
+    const matrix: number[][] = [];
+
+    const taskAgreements = overlappedTasks.map(task => {
+      const scores: number[] = [];
+      const taskWeights: number[] = [];
+
+      selectedUsers.forEach(email => {
+        const key = `annotate_data_${email}`;
+        const userDataStr = localStorage.getItem(key);
+        if (userDataStr) {
+          try {
+            const userData = JSON.parse(userDataStr);
+            if (userData[task.id] && userData[task.id].culturalScore !== undefined) {
+              scores.push(userData[task.id].culturalScore);
+            }
+          } catch { }
+        }
+      });
+
+      if (scores.length >= selectedUsers.length) {
+        matrix.push(scores);
+      }
+
+      if (scores.length < 2) return { taskId: task.id, taskTitle: task.title, mean: 0, stdDev: 0, agreement: 0 };
+
+      const mean = scores.reduce((a, b) => a + b, 0) / scores.length;
+      const variance = scores.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / scores.length;
+      const stdDev = Math.sqrt(variance);
+
+      const avgDiff = scores.reduce((a, b) => a + Math.abs(b - mean), 0) / scores.length;
+      const agreement = Math.max(0, 1 - (avgDiff / 50));
+
+      return { taskId: task.id, taskTitle: task.title, mean, stdDev, agreement };
+    });
+
+    const overallAgreement = taskAgreements.length > 0
+      ? taskAgreements.reduce((a, b) => a + b.agreement, 0) / taskAgreements.length
+      : 0;
+
+    // Advanced Metrics
+    let icc = 0;
+    let avgPearson = 0;
+    let avgSpearman = 0;
+
+    if (matrix.length >= 2 && selectedUsers.length >= 2) {
+      icc = calculateICC(matrix);
+
+      let pSum = 0, sSum = 0, count = 0;
+      for (let i = 0; i < selectedUsers.length; i++) {
+        for (let j = i + 1; j < selectedUsers.length; j++) {
+          const rater1Scores = matrix.map(row => row[i]);
+          const rater2Scores = matrix.map(row => row[j]);
+          pSum += calculatePearson(rater1Scores, rater2Scores);
+          sSum += calculateSpearman(rater1Scores, rater2Scores);
+          count++;
+        }
+      }
+      avgPearson = pSum / count;
+      avgSpearman = sSum / count;
+    }
+
+    setAgreementResult({
+      taskAgreements,
+      overallAgreement,
+      icc,
+      pearson: avgPearson,
+      spearman: avgSpearman
+    });
+  };
   const [taskForm, setTaskForm] = useState<{
     id: string;
     title: string;
@@ -110,7 +278,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     question: string;
     category: string;
     gender: string;
-  }>({ id: '', title: '', objective: '', description: '', projectId: '', paragraphs: [''], images: [''], audio: [''], question: '', category: '', gender: '' });
+    taskType: 'independent' | 'overlapped';
+  }>({ id: '', title: '', objective: '', description: '', projectId: '', paragraphs: [''], images: [''], audio: [''], question: '', category: '', gender: '', taskType: 'independent' });
 
   // --- Handlers ---
 
@@ -185,11 +354,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         audio: task.audio || [''],
         question: task.question || '',
         category: task.category || '',
-        gender: task.gender || ''
+        gender: task.gender || '',
+        taskType: task.taskType || 'independent'
       });
     } else {
       setEditingTask(null);
-      setTaskForm({ id: '', title: '', objective: '', description: '', projectId: '', paragraphs: [''], images: [''], audio: [''], question: '', category: '', gender: '' });
+      setTaskForm({ id: '', title: '', objective: '', description: '', projectId: '', paragraphs: [''], images: [''], audio: [''], question: '', category: '', gender: '', taskType: 'independent' });
     }
     setIsTaskModalOpen(true);
   };
@@ -210,7 +380,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       audio: taskForm.audio.filter(a => a.trim() !== ''),
       question: taskForm.question,
       category: taskForm.category as 'diet' | 'exercise' | undefined,
-      gender: taskForm.gender as 'male' | 'female' | 'other' | undefined
+      gender: taskForm.gender as 'male' | 'female' | 'other' | undefined,
+      taskType: taskForm.taskType
     };
 
     if (editingTask) {
@@ -473,14 +644,37 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </div>
                         <div className="flex flex-wrap gap-2">
                           {projectMembers.length === 0 && <span className="text-xs text-slate-400 italic">{t('no_members', language)}</span>}
-                          {projectMembers.map(member => (
-                            <div key={member.email} className="flex items-center bg-white border border-slate-200 rounded-full px-3 py-1 shadow-sm">
-                              <span className="text-xs font-bold text-slate-700 mr-2">{member.name}</span>
-                              <button onClick={() => onRemoveProjectAssignment(project.id, member.email)} className="text-slate-300 hover:text-red-500 transition-colors">
-                                <i className="fa-solid fa-times-circle"></i>
-                              </button>
-                            </div>
-                          ))}
+                          {projectMembers.map(member => {
+                            const projectTasks = tasks.filter(t => t.projectId === project.id);
+                            const totalTasks = projectTasks.length;
+                            const completionPercentage = (() => {
+                              if (totalTasks === 0) return 0;
+                              const key = `annotate_data_${member.email}`;
+                              const userDataStr = localStorage.getItem(key);
+                              if (!userDataStr) return 0;
+                              try {
+                                const userData = JSON.parse(userDataStr);
+                                const completedCount = projectTasks.filter(t => userData.completedTaskIds?.includes(t.id)).length;
+                                return Math.round((completedCount / totalTasks) * 100);
+                              } catch {
+                                return 0;
+                              }
+                            })();
+
+                            return (
+                              <div key={member.email} className="flex items-center bg-white border border-slate-200 rounded-full px-4 py-1.5 shadow-sm group/tag transition-all hover:border-indigo-300">
+                                <div className="flex flex-col mr-3">
+                                  <span className="text-[11px] font-black text-slate-800 leading-none">{member.name}</span>
+                                  <span className={`text-[9px] font-bold mt-0.5 ${completionPercentage === 100 ? 'text-emerald-500' : 'text-indigo-400'}`}>
+                                    {completionPercentage}%
+                                  </span>
+                                </div>
+                                <button onClick={() => onRemoveProjectAssignment(project.id, member.email)} className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover/tag:opacity-100">
+                                  <i className="fa-solid fa-times-circle"></i>
+                                </button>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
 
@@ -723,6 +917,160 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           </div>
         )}
+
+        {activeTab === 'agreement' && (
+          <div className="space-y-10 animate-in slide-in-from-bottom-4">
+            <div className="bg-white rounded-[4rem] border border-slate-100 shadow-sm p-12 space-y-12">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                {/* Project Selection */}
+                <div className="space-y-6">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest px-4">{t('select_project', language)}</label>
+                  <select
+                    value={selectedAgrProject}
+                    onChange={(e) => {
+                      setSelectedAgrProject(e.target.value);
+                      setSelectedUsers([]);
+                      setAgreementResult(null);
+                    }}
+                    className="w-full bg-slate-50 border border-slate-100 rounded-[2rem] px-8 py-5 text-sm font-bold outline-none hover:border-indigo-300 focus:ring-4 focus:ring-indigo-50 transition-all appearance-none"
+                  >
+                    <option value="">{t('select_project', language)}...</option>
+                    {projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+                  </select>
+                </div>
+
+                {/* User Selection */}
+                <div className="space-y-6">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest px-4">{t('select_users', language)}</label>
+                  <div className="bg-slate-50 border border-slate-100 rounded-[2rem] p-6 max-h-[300px] overflow-y-auto space-y-3 no-scrollbar">
+                    {!selectedAgrProject ? (
+                      <p className="text-xs text-slate-400 italic p-4">{t('select_project', language)} first</p>
+                    ) : (
+                      <>
+                        {getEligibleUsers(selectedAgrProject).length === 0 ? (
+                          <p className="text-xs text-slate-400 italic p-4">{t('no_eligible_users', language)}</p>
+                        ) : (
+                          getEligibleUsers(selectedAgrProject).map(user => (
+                            <label key={user.email} className="flex items-center p-4 bg-white rounded-2xl border border-slate-100 hover:border-indigo-200 cursor-pointer transition-all">
+                              <input
+                                type="checkbox"
+                                checked={selectedUsers.includes(user.email)}
+                                onChange={(e) => {
+                                  if (e.target.checked) setSelectedUsers([...selectedUsers, user.email]);
+                                  else setSelectedUsers(selectedUsers.filter(u => u !== user.email));
+                                }}
+                                className="w-5 h-5 rounded-lg border-slate-300 text-indigo-600 focus:ring-indigo-500 mr-4"
+                              />
+                              <div>
+                                <p className="text-xs font-black text-slate-800 leading-none">{user.name}</p>
+                                <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tight">{user.email}</p>
+                              </div>
+                            </label>
+                          ))
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-center pt-6">
+                <button
+                  onClick={computeAgreement}
+                  disabled={!selectedAgrProject || selectedUsers.length < 2}
+                  className="px-12 py-5 bg-indigo-600 text-white rounded-[2rem] text-xs font-black uppercase tracking-[0.2em] shadow-2xl shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-20 disabled:scale-100 active:scale-95 flex items-center"
+                >
+                  <i className="fa-solid fa-calculator mr-3"></i>
+                  {t('compute_agreement', language)}
+                </button>
+              </div>
+            </div>
+
+            {/* Agreement Results */}
+            {agreementResult && (
+              <div className="space-y-12 animate-in slide-in-from-top-8">
+                {/* Overall Score Card */}
+                <div className="bg-gradient-to-br from-indigo-600 to-indigo-900 rounded-[4rem] p-16 text-white shadow-2xl relative overflow-hidden">
+                  <div className="absolute top-0 right-0 p-12 opacity-10">
+                    <i className="fa-solid fa-users-viewfinder text-9xl"></i>
+                  </div>
+                  <div className="relative z-10 text-center space-y-6">
+                    <p className="text-xs font-black uppercase tracking-[0.4em] opacity-60">{t('overall_agreement', language)}</p>
+                    <h3 className="text-8xl font-black italic">{(agreementResult.overallAgreement * 100).toFixed(1)}%</h3>
+                    <div className="w-48 h-2 bg-white/20 rounded-full mx-auto overflow-hidden">
+                      <div className="h-full bg-white transition-all duration-1000" style={{ width: `${agreementResult.overallAgreement * 100}%` }}></div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Advanced Metrics Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  <div className="bg-white p-10 rounded-[3rem] border border-slate-100 shadow-sm space-y-4 hover:border-indigo-200 transition-all">
+                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{t('icc_score', language)}</p>
+                    <p className="text-5xl font-black text-indigo-600 italic">{(agreementResult.icc ?? 0).toFixed(3)}</p>
+                    <div className="w-full h-1 bg-slate-50 rounded-full">
+                      <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${Math.max(0, (agreementResult.icc ?? 0)) * 100}%` }}></div>
+                    </div>
+                  </div>
+                  <div className="bg-white p-10 rounded-[3rem] border border-slate-100 shadow-sm space-y-4 hover:border-indigo-200 transition-all">
+                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{t('pearson_score', language)}</p>
+                    <p className="text-5xl font-black text-emerald-500 italic">{(agreementResult.pearson ?? 0).toFixed(3)}</p>
+                    <div className="w-full h-1 bg-slate-50 rounded-full">
+                      <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${Math.max(0, (agreementResult.pearson ?? 0)) * 100}%` }}></div>
+                    </div>
+                  </div>
+                  <div className="bg-white p-10 rounded-[3rem] border border-slate-100 shadow-sm space-y-4 hover:border-indigo-200 transition-all">
+                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{t('spearman_score', language)}</p>
+                    <p className="text-5xl font-black text-amber-500 italic">{(agreementResult.spearman ?? 0).toFixed(3)}</p>
+                    <div className="w-full h-1 bg-slate-50 rounded-full">
+                      <div className="h-full bg-amber-500 rounded-full" style={{ width: `${Math.max(0, (agreementResult.spearman ?? 0)) * 100}%` }}></div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Task Breakdown */}
+                <div className="bg-white rounded-[4rem] border border-slate-100 shadow-sm overflow-hidden">
+                  <table className="w-full text-left">
+                    <thead className="bg-slate-50/50 text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">
+                      <tr>
+                        <th className="py-8 px-14">{t('tasks_tab', language)}</th>
+                        <th className="py-8 px-14 text-center">{t('mean_score', language)}</th>
+                        <th className="py-8 px-14 text-center">{t('standard_deviation', language)}</th>
+                        <th className="py-8 px-14 text-right">{t('agreement_score', language)}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {agreementResult.taskAgreements.map(res => (
+                        <tr key={res.taskId} className="group hover:bg-slate-50/30 transition-all">
+                          <td className="py-8 px-14">
+                            <span className="text-[10px] font-black text-slate-300 uppercase block mb-1">{res.taskId}</span>
+                            <span className="font-bold text-slate-800 italic">{res.taskTitle}</span>
+                          </td>
+                          <td className="py-8 px-14 text-center">
+                            <span className="font-black text-slate-900 text-lg">{res.mean.toFixed(1)}</span>
+                          </td>
+                          <td className="py-8 px-14 text-center">
+                            <span className="font-black text-slate-400 text-sm">± {res.stdDev.toFixed(1)}</span>
+                          </td>
+                          <td className="py-8 px-14 text-right">
+                            <div className="flex items-center justify-end space-x-4">
+                              <span className={`text-sm font-black italic ${res.agreement > 0.8 ? 'text-emerald-500' : res.agreement > 0.5 ? 'text-amber-500' : 'text-rose-500'}`}>
+                                {(res.agreement * 100).toFixed(1)}%
+                              </span>
+                              <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                <div className={`h-full transition-all duration-500 ${res.agreement > 0.8 ? 'bg-emerald-400' : res.agreement > 0.5 ? 'bg-amber-400' : 'bg-rose-400'}`} style={{ width: `${res.agreement * 100}%` }}></div>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ANNOTATION EDIT MODAL */}
@@ -917,6 +1265,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <option value="male">Male</option>
                     <option value="female">Female</option>
                     <option value="other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-black uppercase text-slate-400 mb-2">{t('task_type', language)}</label>
+                  <select
+                    className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 font-bold"
+                    value={taskForm.taskType}
+                    onChange={e => setTaskForm({ ...taskForm, taskType: e.target.value as 'independent' | 'overlapped' })}
+                  >
+                    <option value="independent">{t('independent', language)}</option>
+                    <option value="overlapped">{t('overlapped', language)}</option>
                   </select>
                 </div>
                 <div>
