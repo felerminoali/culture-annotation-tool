@@ -9,6 +9,8 @@ export interface User {
   password?: string;
 }
 
+export type AnnotationSubtype = 'culture' | 'issue';
+
 export interface Annotation {
   id: string;
   start: number;
@@ -17,6 +19,9 @@ export interface Annotation {
   comment: string;
   isImportant: boolean;
   type: 'manual' | 'ai';
+  subtype?: AnnotationSubtype;
+  issueCategory?: string;
+  issueDescription?: string;
   timestamp: number;
   userEmail?: string; // Track who made it
   taskId?: string;
@@ -24,6 +29,7 @@ export interface Annotation {
   relevantJustification?: string;
   isSupported?: DecisionStatus;
   supportedJustification?: string;
+  cultureProxy?: string;
 }
 
 export interface TaskData {
@@ -45,10 +51,17 @@ export interface ImageAnnotation {
   height: number;
   shapeType: ShapeType;
   description: string;
+  comment: string;
   isPresent: DecisionStatus;
   presentJustification?: string;
   isRelevant: DecisionStatus;
   relevantJustification?: string;
+  subtype?: AnnotationSubtype;
+  issueCategory?: string;
+  issueDescription?: string;
+  cultureProxy?: string;
+  isSupported?: DecisionStatus;
+  supportedJustification?: string;
   timestamp: number;
   userEmail?: string;
   taskId?: string;

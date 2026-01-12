@@ -22,13 +22,13 @@ const TextDisplay: React.FC<TextDisplayProps> = ({ content, annotations, onSelec
     // Logic to calculate offsets relative to the container
     const start = content.indexOf(selectedText);
     if (start !== -1) {
-        onSelect({
-            start,
-            end: start + selectedText.length,
-            text: selectedText
-        });
+      onSelect({
+        start,
+        end: start + selectedText.length,
+        text: selectedText
+      });
     }
-    
+
     // Clear browser selection so the modal can handle it
     selection.removeAllRanges();
   };
@@ -38,7 +38,7 @@ const TextDisplay: React.FC<TextDisplayProps> = ({ content, annotations, onSelec
 
     // Sort annotations by start offset
     const sortedAnnotations = [...annotations].sort((a, b) => a.start - b.start);
-    
+
     const parts: React.ReactNode[] = [];
     let lastIndex = 0;
 
@@ -49,12 +49,14 @@ const TextDisplay: React.FC<TextDisplayProps> = ({ content, annotations, onSelec
       }
 
       // Add the highlight
+      const isIssue = anno.subtype === 'issue';
       parts.push(
         <span
           key={anno.id}
-          className={`highlight-span group relative border-b-2 transition-all duration-200 ${
-            anno.isImportant ? 'border-red-500 bg-red-50 hover:bg-red-100' : 'border-indigo-500 bg-indigo-50 hover:bg-indigo-100'
-          }`}
+          className={`highlight-span group relative border-b-2 transition-all duration-200 ${isIssue
+              ? 'border-red-500 bg-red-50 hover:bg-red-100'
+              : anno.isImportant ? 'border-amber-500 bg-amber-50 hover:bg-amber-100' : 'border-indigo-500 bg-indigo-50 hover:bg-indigo-100'
+            }`}
           onClick={(e) => {
             e.stopPropagation();
             onEditAnnotation(anno);
@@ -62,8 +64,8 @@ const TextDisplay: React.FC<TextDisplayProps> = ({ content, annotations, onSelec
         >
           {content.slice(anno.start, anno.end)}
           <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-gray-900 text-white text-[10px] py-1 px-2 rounded whitespace-nowrap z-50 shadow-xl border border-gray-700">
-            <i className="fa-solid fa-pen-to-square mr-1 opacity-70"></i>
-            {anno.comment || "Click to edit"}
+            <i className={`fa-solid ${isIssue ? 'fa-circle-exclamation' : 'fa-pen-to-square'} mr-1 opacity-70`}></i>
+            {isIssue ? `${anno.issueCategory}: ${anno.issueDescription}` : (anno.comment || "Click to edit")}
           </span>
         </span>
       );

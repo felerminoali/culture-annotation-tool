@@ -3,7 +3,9 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Annotation, SelectionState, ImageAnnotation, ShapeType, DecisionStatus, User, TaskAssignment, UserRole, Project, Task, ProjectAssignment, Language } from './types';
 import TextDisplay from './components/TextDisplay';
 import AnnotationModal from './components/AnnotationModal';
+import TextIssueModal from './components/TextIssueModal';
 import ImageAnnotationModal from './components/ImageAnnotationModal';
+import ImageIssueModal from './components/ImageIssueModal';
 import ImageWithPinpoints from './components/ImageWithPinpoints';
 import GuidelinesModal from './components/GuidelinesModal';
 import ProfileModal from './components/ProfileModal';
@@ -57,7 +59,10 @@ const App: React.FC = () => {
   const [isReviewingCompleted, setIsReviewingCompleted] = useState(false);
   const [editingTextAnnotation, setEditingTextAnnotation] = useState<Annotation | null>(null);
   const [isTextModalOpen, setIsTextModalOpen] = useState(false);
+  const [isIssueModalOpen, setIsIssueModalOpen] = useState(false);
+  const [isTypeSelectorOpen, setIsTypeSelectorOpen] = useState(false);
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+  const [isImageIssueModalOpen, setIsImageIssueModalOpen] = useState(false);
   const [activeImageIdx, setActiveImageIdx] = useState<number | null>(null);
   const [pendingPin, setPendingPin] = useState<{ x: number, y: number, width: number, height: number, shapeType: ShapeType } | null>(null);
   const [editingImageAnno, setEditingImageAnno] = useState<ImageAnnotation | null>(null);
@@ -774,13 +779,55 @@ const App: React.FC = () => {
 
   const handleSelect = (s: SelectionState) => {
     const overlaps = annotations.some(a => (s.start >= a.start && s.start < a.end) || (s.end > a.start && s.end <= a.end));
-    if (!overlaps) { setEditingTextAnnotation(null); setCurrentSelection(s); setIsTextModalOpen(true); }
+    if (!overlaps) {
+      setEditingTextAnnotation(null);
+      setCurrentSelection(s);
+      setIsTypeSelectorOpen(true);
+    }
+  };
+
+  const handleImageChooseType = (subtype: 'culture' | 'issue') => {
+    if (editingImageAnno) {
+      setEditingImageAnno(prev => prev ? { ...prev, subtype } : null);
+    } else if (pendingPin) {
+      setPendingPin(prev => prev ? { ...prev, subtype } : null);
+    }
+    setIsTypeSelectorOpen(false);
+    if (subtype === 'culture') {
+      setIsImageModalOpen(true);
+    } else {
+      setIsImageIssueModalOpen(true);
+    }
+  };
+
+  const handleChooseType = (subtype: 'culture' | 'issue') => {
+    if (pendingPin || editingImageAnno) { // Check if an image annotation is pending or being edited
+      handleImageChooseType(subtype);
+      return;
+    }
+    // Existing text logic
+    if (editingTextAnnotation) {
+      setEditingTextAnnotation({ ...editingTextAnnotation, subtype });
+    } else if (currentSelection) {
+      // Will be handled in save logic
+    }
+
+    setIsTypeSelectorOpen(false);
+    if (subtype === 'culture') {
+      setIsTextModalOpen(true);
+    } else {
+      setIsIssueModalOpen(true);
+    }
   };
 
   const handleEditHighlight = (anno: Annotation) => {
     setEditingTextAnnotation(anno);
     setCurrentSelection(null);
-    setIsTextModalOpen(true);
+    if (anno.subtype === 'issue') {
+      setIsIssueModalOpen(true);
+    } else {
+      setIsTextModalOpen(true);
+    }
   };
 
   const saveTextAnnotation = (
@@ -789,7 +836,8 @@ const App: React.FC = () => {
     isRelevant: DecisionStatus,
     relevantJustification: string,
     isSupported: DecisionStatus,
-    supportedJustification: string
+    supportedJustification: string,
+    cultureProxy: string
   ) => {
     if (!currentTask) return;
     if (editingTextAnnotation) {
@@ -801,6 +849,7 @@ const App: React.FC = () => {
         relevantJustification,
         isSupported,
         supportedJustification,
+        cultureProxy,
         timestamp: Date.now()
       } : a));
     } else if (currentSelection) {
@@ -813,10 +862,12 @@ const App: React.FC = () => {
         relevantJustification,
         isSupported,
         supportedJustification,
+        cultureProxy,
         type: 'manual',
         timestamp: Date.now(),
         userEmail: currentUser?.email,
-        taskId: currentTask.id
+        taskId: currentTask.id,
+        subtype: 'culture'
       };
       setAnnotations(prev => [...prev, newAnnotation]);
     }
@@ -825,19 +876,52 @@ const App: React.FC = () => {
     setEditingTextAnnotation(null);
   };
 
+  const saveIssueAnnotation = (category: string, description: string) => {
+    if (!currentTask) return;
+    if (editingTextAnnotation) {
+      setAnnotations(prev => prev.map(a => a.id === editingTextAnnotation.id ? {
+        ...a,
+        issueCategory: category,
+        issueDescription: description,
+        timestamp: Date.now()
+      } : a));
+    } else if (currentSelection) {
+      const newAnnotation: Annotation = {
+        id: Math.random().toString(36).substr(2, 9),
+        ...currentSelection,
+        comment: '',
+        isImportant: false,
+        type: 'manual',
+        subtype: 'issue',
+        issueCategory: category,
+        issueDescription: description,
+        timestamp: Date.now(),
+        userEmail: currentUser?.email,
+        taskId: currentTask.id
+      };
+      setAnnotations(prev => [...prev, newAnnotation]);
+    }
+    setIsIssueModalOpen(false);
+    setCurrentSelection(null);
+    setEditingTextAnnotation(null);
+  };
+
   const handleAddPin = (paraIdx: number, x: number, y: number, width: number, height: number, shapeType: ShapeType) => {
     setActiveImageIdx(paraIdx);
     setPendingPin({ x, y, width, height, shapeType });
     setEditingImageAnno(null);
-    setIsTextModalOpen(false);
-    setIsImageModalOpen(true);
+    setIsTypeSelectorOpen(true);
   };
 
   const handleEditPin = (paraIdx: number, anno: ImageAnnotation) => {
     setActiveImageIdx(paraIdx);
     setEditingImageAnno(anno);
     setPendingPin(null);
-    setIsImageModalOpen(true);
+    if (anno.subtype === 'issue') {
+      setIsImageIssueModalOpen(true);
+    } else {
+      setIsImageModalOpen(true);
+    }
   };
 
   const saveImageAnnotation = (data: Omit<ImageAnnotation, 'id' | 'x' | 'y' | 'width' | 'height' | 'timestamp'>) => {
@@ -860,11 +944,21 @@ const App: React.FC = () => {
       setImageAnnotations(prev => ({ ...prev, [paraIdxKey]: [...(prev[paraIdxKey] || []), newAnno] }));
     }
     setIsImageModalOpen(false);
+    setIsImageIssueModalOpen(false);
     setEditingImageAnno(null);
     setPendingPin(null);
   };
 
   const handleCommitTask = () => {
+    const hasTextAnnotations = annotations.length > 0;
+    const hasImageAnnotations = Object.values(imageAnnotations).some((list: any) => list.length > 0);
+
+    if (!hasTextAnnotations && !hasImageAnnotations) {
+      if (!window.confirm(t('confirm_empty_submission', language))) {
+        return;
+      }
+    }
+
     if (!isTaskSubmitted) {
       setCompletedTaskIds(prev => [...prev, currentTask.id]);
     }
@@ -1068,12 +1162,29 @@ const App: React.FC = () => {
                     <div className="space-y-2">
                       {/* Keep existing render logic */}
                       {annotations.map(anno => (
-                        <div key={anno.id} className="p-3.5 rounded-2xl border bg-white border-slate-100 text-[11px] hover:bg-slate-50 cursor-pointer group transition-all shadow-sm hover:shadow-md" onClick={() => handleEditHighlight(anno)}>
+                        <div key={anno.id} className={`p-3.5 rounded-2xl border bg-white border-slate-100 text-[11px] hover:bg-slate-50 cursor-pointer group transition-all shadow-sm hover:shadow-md ${anno.subtype === 'issue' ? 'border-l-4 border-l-red-500' : 'border-l-4 border-l-indigo-500'}`} onClick={() => handleEditHighlight(anno)}>
                           <div className="flex justify-between items-center mb-1">
                             <span className="font-bold text-slate-800 italic truncate mr-2">"{anno.text}"</span>
+                            <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${anno.subtype === 'issue' ? 'bg-red-50 text-red-600' : 'bg-indigo-50 text-indigo-600'}`}>
+                              {anno.subtype === 'issue' ? t('text_issue', language) : t('culture_marker', language).split(' ')[0]}
+                            </span>
                             <button onClick={(e) => { e.stopPropagation(); setAnnotations(prev => prev.filter(a => a.id !== anno.id)); }} className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity"><i className="fa-solid fa-trash-can text-[10px]"></i></button>
                           </div>
-                          <p className="text-[10px] text-slate-400 truncate opacity-80 leading-relaxed font-medium">{anno.comment || 'No note.'}</p>
+                          <p className="text-[10px] text-slate-400 truncate opacity-80 leading-relaxed font-medium">
+                            {anno.subtype === 'issue'
+                              ? `${t(anno.issueCategory as any, language)}: ${anno.issueDescription}`
+                              : (
+                                <span className="flex flex-col">
+                                  {anno.cultureProxy && (
+                                    <span className="text-indigo-600 font-black uppercase text-[8px] mb-0.5 tracking-tighter">
+                                      [{t(anno.cultureProxy as any, language)}]
+                                    </span>
+                                  )}
+                                  <span className="line-clamp-2 italic text-slate-500">{anno.comment || 'No comment'}</span>
+                                </span>
+                              )
+                            }
+                          </p>
                         </div>
                       ))}
                     </div>
@@ -1085,10 +1196,13 @@ const App: React.FC = () => {
                     </h2>
                     <div className="space-y-2">
                       {flatImageAnnotations.map(anno => (
-                        <div key={anno.id} className="p-3.5 rounded-2xl border bg-white border-slate-100 text-[11px] hover:bg-slate-50 cursor-pointer group transition-all shadow-sm hover:shadow-md" onClick={() => handleEditPin(anno.paraIdx, anno)}>
+                        <div key={anno.id} className={`p-3.5 rounded-2xl border bg-white border-slate-100 text-[11px] hover:bg-slate-50 cursor-pointer group transition-all shadow-sm hover:shadow-md ${anno.subtype === 'issue' ? 'border-l-4 border-l-red-500' : 'border-l-4 border-l-indigo-500'}`} onClick={() => handleEditPin(anno.paraIdx, anno)}>
                           <div className="flex justify-between items-center mb-1">
                             <span className="font-bold text-slate-800 capitalize truncate mr-2">
-                              {anno.shapeType} #{anno.id.slice(0, 4)}
+                              {anno.subtype === 'issue' ? t(anno.issueCategory as any, language) : anno.description || `${anno.shapeType} #${anno.id.slice(0, 4)}`}
+                            </span>
+                            <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${anno.subtype === 'issue' ? 'bg-red-50 text-red-600' : 'bg-indigo-50 text-indigo-600'}`}>
+                              {anno.subtype === 'issue' ? t('image_issue', language).split(' ')[1] : t('image_culture_marker', language).split(' ')[1]}
                             </span>
                             <button onClick={(e) => {
                               e.stopPropagation();
@@ -1103,6 +1217,21 @@ const App: React.FC = () => {
                               <i className="fa-solid fa-trash-can text-[10px]"></i>
                             </button>
                           </div>
+                          <p className="text-[10px] text-slate-400 truncate opacity-80 leading-relaxed font-medium">
+                            {anno.subtype === 'issue'
+                              ? anno.issueDescription
+                              : (
+                                <span className="flex flex-col">
+                                  {anno.cultureProxy && (
+                                    <span className="text-indigo-600 font-black uppercase text-[8px] mb-0.5 tracking-tighter">
+                                      [{t(anno.cultureProxy as any, language)}]
+                                    </span>
+                                  )}
+                                  <span className="line-clamp-2 italic text-slate-500">{anno.comment || 'No comment'}</span>
+                                </span>
+                              )
+                            }
+                          </p>
                         </div>
                       ))}
                     </div>
@@ -1156,10 +1285,10 @@ const App: React.FC = () => {
             {!isSidebarCollapsed && t('logout', language)}
           </button>
         </div>
-      </aside>
+      </aside >
 
       {/* MAIN CONTENT AREA */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      < div className="flex-1 flex flex-col overflow-hidden" >
         <header className="h-24 bg-white border-b border-slate-100 flex items-center justify-between px-10 shrink-0 z-40 shadow-sm">
           <div className="flex items-center space-x-8">
             {viewMode === 'workspace' ? (
@@ -1352,8 +1481,55 @@ const App: React.FC = () => {
                     ))}
                   </div>
 
-                  {/* CULTURAL ALIGNMENT SCORING */}
+                  {/* LANGUAGE SIMILARITY QUESTION */}
                   <div className="pt-32 pb-16 max-w-4xl mx-auto">
+                    <div className="bg-white rounded-[4rem] border border-slate-100 shadow-2xl p-16 space-y-12 animate-in slide-in-from-bottom-8">
+                      <div className="text-center space-y-4">
+                        <h3 className="text-3xl font-black text-slate-900 italic tracking-tight">
+                          {t('language_similarity_question', language)}
+                        </h3>
+                        <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">
+                          {t('language_similarity_label', language)}
+                        </p>
+                      </div>
+
+                      <div className="space-y-10">
+                        <div className="flex justify-center space-x-6">
+                          {(['yes', 'no'] as DecisionStatus[]).map((status) => (
+                            <button
+                              key={status}
+                              onClick={() => setLanguageSimilarity(status)}
+                              className={`px-12 py-6 rounded-3xl text-sm font-black uppercase tracking-widest transition-all shadow-lg active:scale-95 border-b-4 ${languageSimilarity === status
+                                ? 'bg-indigo-600 text-white border-indigo-900 shadow-indigo-200'
+                                : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'
+                                }`}
+                            >
+                              <i className={`fa-solid fa-circle-${status === 'yes' ? 'check' : 'xmark'} mr-2`}></i>
+                              {status === 'yes' ? 'Yes' : 'No'}
+                            </button>
+                          ))}
+                        </div>
+
+                        {languageSimilarity === 'no' && (
+                          <div className="animate-in slide-in-from-top-4 duration-300">
+                            <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 px-4">
+                              {t('why_justification', language)}
+                            </label>
+                            <textarea
+                              className="w-full p-8 bg-red-50/30 border border-red-100 rounded-[2.5rem] font-medium text-slate-700 focus:ring-4 focus:ring-red-100 outline-none transition-all"
+                              rows={4}
+                              placeholder={t('missing_placeholder', language)}
+                              value={languageSimilarityJustification}
+                              onChange={(e) => setLanguageSimilarityJustification(e.target.value)}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* CULTURAL ALIGNMENT SCORING */}
+                  <div className="pb-16 max-w-4xl mx-auto">
                     <div className="bg-white rounded-[4rem] border border-slate-100 shadow-2xl p-16 space-y-12 animate-in slide-in-from-bottom-8">
                       <div className="text-center space-y-4">
                         <h3 className="text-3xl font-black text-slate-900 italic tracking-tight">
@@ -1438,53 +1614,6 @@ const App: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* LANGUAGE SIMILARITY QUESTION */}
-                  <div className="pb-16 max-w-4xl mx-auto">
-                    <div className="bg-white rounded-[4rem] border border-slate-100 shadow-2xl p-16 space-y-12 animate-in slide-in-from-bottom-8">
-                      <div className="text-center space-y-4">
-                        <h3 className="text-3xl font-black text-slate-900 italic tracking-tight">
-                          {t('language_similarity_question', language)}
-                        </h3>
-                        <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">
-                          {t('language_similarity_label', language)}
-                        </p>
-                      </div>
-
-                      <div className="space-y-10">
-                        <div className="flex justify-center space-x-6">
-                          {(['yes', 'no'] as DecisionStatus[]).map((status) => (
-                            <button
-                              key={status}
-                              onClick={() => setLanguageSimilarity(status)}
-                              className={`px-12 py-6 rounded-3xl text-sm font-black uppercase tracking-widest transition-all shadow-lg active:scale-95 border-b-4 ${languageSimilarity === status
-                                ? 'bg-indigo-600 text-white border-indigo-900 shadow-indigo-200'
-                                : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'
-                                }`}
-                            >
-                              <i className={`fa-solid fa-circle-${status === 'yes' ? 'check' : 'xmark'} mr-2`}></i>
-                              {status === 'yes' ? 'Yes' : 'No'}
-                            </button>
-                          ))}
-                        </div>
-
-                        {languageSimilarity === 'no' && (
-                          <div className="animate-in slide-in-from-top-4 duration-300">
-                            <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 px-4">
-                              {t('why_justification', language)}
-                            </label>
-                            <textarea
-                              className="w-full p-8 bg-red-50/30 border border-red-100 rounded-[2.5rem] font-medium text-slate-700 focus:ring-4 focus:ring-red-100 outline-none transition-all"
-                              rows={4}
-                              placeholder={t('missing_placeholder', language)}
-                              value={languageSimilarityJustification}
-                              onChange={(e) => setLanguageSimilarityJustification(e.target.value)}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
                   {/* Submission Footer Actions */}
                   <div className="pt-24 flex flex-col items-center">
 
@@ -1539,13 +1668,61 @@ const App: React.FC = () => {
         language={language}
         projectGuideline={projects.find(p => p.id === currentTask?.projectId)?.guideline}
       />
+      <TextIssueModal
+        isOpen={isIssueModalOpen}
+        onClose={() => setIsIssueModalOpen(false)}
+        onSave={saveIssueAnnotation}
+        selection={currentSelection}
+        editingAnnotation={editingTextAnnotation}
+        language={language}
+      />
+      {/* TYPE SELECTOR MODAL */}
+      {
+        isTypeSelectorOpen && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-[2rem] shadow-2xl p-8 w-full max-w-sm transform animate-in zoom-in-95 duration-200 border border-slate-100">
+              <h3 className="text-lg font-black text-slate-900 text-center mb-6 italic">{t('select_category', language)}</h3>
+              <div className="space-y-4">
+                <button
+                  onClick={() => handleChooseType('culture')}
+                  className="w-full py-6 bg-indigo-50 border-2 border-indigo-100 rounded-2xl flex flex-col items-center hover:bg-indigo-100 hover:border-indigo-300 transition-all group"
+                >
+                  <i className="fa-solid fa-earth-americas text-2xl text-indigo-600 mb-2 group-hover:scale-110 transition-transform"></i>
+                  <span className="text-xs font-black uppercase tracking-widest text-indigo-900">{t('culture_marker', language)}</span>
+                </button>
+                <button
+                  onClick={() => handleChooseType('issue')}
+                  className="w-full py-6 bg-red-50 border-2 border-red-100 rounded-2xl flex flex-col items-center hover:bg-red-100 hover:border-red-300 transition-all group"
+                >
+                  <i className="fa-solid fa-circle-exclamation text-2xl text-red-600 mb-2 group-hover:scale-110 transition-transform"></i>
+                  <span className="text-xs font-black uppercase tracking-widest text-red-900">
+                    {(pendingPin || editingImageAnno) ? t('image_issue', language) : t('text_issue', language)}
+                  </span>
+                </button>
+              </div>
+              <button
+                onClick={() => { setIsTypeSelectorOpen(false); setCurrentSelection(null); }}
+                className="w-full mt-6 py-3 text-slate-400 text-[10px] font-black uppercase tracking-widest hover:text-slate-600 transition-colors"
+              >
+                {t('cancel', language)}
+              </button>
+            </div>
+          </div>
+        )
+      }
       <ImageAnnotationModal
         isOpen={isImageModalOpen}
         onClose={() => setIsImageModalOpen(false)}
         onSave={saveImageAnnotation}
         existingAnnotation={editingImageAnno}
         language={language}
-        projectGuideline={projects.find(p => p.id === currentTask?.projectId)?.guideline}
+      />
+      <ImageIssueModal
+        isOpen={isImageIssueModalOpen}
+        onClose={() => setIsImageIssueModalOpen(false)}
+        onSave={(data) => saveImageAnnotation({ ...data, subtype: 'issue' })}
+        existingAnnotation={editingImageAnno}
+        language={language}
       />
       <GuidelinesModal
         isOpen={isGuidelinesModalOpen}
