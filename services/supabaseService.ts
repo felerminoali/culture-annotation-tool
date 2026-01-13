@@ -1,8 +1,11 @@
 import { createClient, SupabaseClient, User as SupabaseUser } from '@supabase/supabase-js';
 import { User, Project, Task, Annotation, ImageAnnotation, TaskAssignment, ProjectAssignment, DecisionStatus } from '../types';
 
-const supabaseUrl = import.meta.env?.VITE_SUPABASE_URL as string | undefined;
-const supabaseAnonKey = import.meta.env?.VITE_SUPABASE_ANON_KEY as string | undefined;
+// const supabaseUrl = import.meta.env?.VITE_SUPABASE_URL as string | undefined;
+// const supabaseAnonKey = import.meta.env?.VITE_SUPABASE_ANON_KEY as string | undefined;
+
+const supabaseUrl = import.meta.env?.NEXT_PUBLIC_SUPABASE_URL as string | undefined;
+const supabaseAnonKey = import.meta.env?.NEXT_PUBLIC_SUPABASE_ANON_KEY as string | undefined;
 
 if (!supabaseUrl || !supabaseAnonKey) {
     console.warn('Supabase credentials not found. Running in offline mode with localStorage.');
