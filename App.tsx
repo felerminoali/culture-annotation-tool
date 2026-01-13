@@ -735,7 +735,7 @@ const App: React.FC = () => {
           formData.email,
           formData.password,
           formData.name,
-          formData.role
+          'annotator' // All signups are annotators
         );
 
         if (error) {

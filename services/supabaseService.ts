@@ -27,7 +27,8 @@ export const signUp = async (email: string, password: string, name: string, role
             data: {
                 name,
                 role
-            }
+            },
+            emailRedirectTo: undefined // Disable email confirmation
         }
     });
 
