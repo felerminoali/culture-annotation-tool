@@ -46,3 +46,6 @@ BEGIN
   INSERT INTO public.users (id, email, name, role)
   VALUES (new_user_id, 'john@company.com', 'John Smith', 'admin');
 END $$;
+
+      'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(env.VITE_SUPABASE_URL),
+      'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(env.VITE_SUPABASE_ANON_KEY)
