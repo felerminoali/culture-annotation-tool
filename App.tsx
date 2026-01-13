@@ -12,6 +12,7 @@ import ProfileModal from './components/ProfileModal';
 import AdminDashboard from './components/AdminDashboard';
 import { getSmartSuggestions, getTextToSpeech, decodeBase64, decodeAudioData } from './services/geminiService';
 import { t, TranslationKey } from './services/i18n';
+import * as supabaseService from './services/supabaseService';
 
 
 
@@ -149,83 +150,174 @@ const App: React.FC = () => {
     );
   }, [imageAnnotations]);
 
-  // Sync Global Resources
+  // Sync Global Resources from Supabase
   useEffect(() => {
-    const savedUsers = localStorage.getItem('annotate_users');
-    if (savedUsers) setUsers(JSON.parse(savedUsers) as User[]);
+    const loadGlobalResources = async () => {
+      try {
+        // Check if Supabase is configured
+        if (!supabaseService.supabase) {
+          console.warn('Supabase not configured, using localStorage fallback');
+          // Fallback to localStorage
+          const savedUsers = localStorage.getItem('annotate_users');
+          if (savedUsers) setUsers(JSON.parse(savedUsers) as User[]);
 
-    const savedAssignments = localStorage.getItem('annotate_assignments');
-    if (savedAssignments) setAssignments(JSON.parse(savedAssignments) as TaskAssignment[]);
+          const savedAssignments = localStorage.getItem('annotate_assignments');
+          if (savedAssignments) setAssignments(JSON.parse(savedAssignments) as TaskAssignment[]);
 
-    const savedLog = localStorage.getItem('annotate_global_log');
-    if (savedLog) setGlobalLog(JSON.parse(savedLog) as Annotation[]);
+          const savedLog = localStorage.getItem('annotate_global_log');
+          if (savedLog) setGlobalLog(JSON.parse(savedLog) as Annotation[]);
 
-    const savedProjects = localStorage.getItem('annotate_projects');
-    if (savedProjects) setProjects(JSON.parse(savedProjects) as Project[]);
+          const savedProjects = localStorage.getItem('annotate_projects');
+          if (savedProjects) setProjects(JSON.parse(savedProjects) as Project[]);
 
-    const savedTasks = localStorage.getItem('annotate_tasks');
-    setTasks(savedTasks ? JSON.parse(savedTasks) as Task[] : []);
+          const savedTasks = localStorage.getItem('annotate_tasks');
+          setTasks(savedTasks ? JSON.parse(savedTasks) as Task[] : []);
 
-    const savedProjectAssignments = localStorage.getItem('annotate_project_assignments');
-    if (savedProjectAssignments) setProjectAssignments(JSON.parse(savedProjectAssignments) as ProjectAssignment[]);
+          const savedProjectAssignments = localStorage.getItem('annotate_project_assignments');
+          if (savedProjectAssignments) setProjectAssignments(JSON.parse(savedProjectAssignments) as ProjectAssignment[]);
 
-    const savedLang = localStorage.getItem('annotate_language') as Language;
-    if (savedLang) setLanguage(savedLang);
+          const savedLang = localStorage.getItem('annotate_language') as Language;
+          if (savedLang) setLanguage(savedLang);
+          return;
+        }
+
+        // Fetch from Supabase
+        const [usersData, projectsData, tasksData, projectAssignmentsData, taskAssignmentsData] = await Promise.all([
+          supabaseService.fetchUsers(),
+          supabaseService.fetchProjects(),
+          supabaseService.fetchTasks(),
+          supabaseService.fetchProjectAssignments(),
+          supabaseService.fetchTaskAssignments()
+        ]);
+
+        setUsers(usersData);
+        setProjects(projectsData);
+        setTasks(tasksData);
+        setProjectAssignments(projectAssignmentsData);
+        setAssignments(taskAssignmentsData);
+
+        // Language preference still from localStorage
+        const savedLang = localStorage.getItem('annotate_language') as Language;
+        if (savedLang) setLanguage(savedLang);
+      } catch (error) {
+        console.error('Error loading global resources:', error);
+      }
+    };
+
+    loadGlobalResources();
   }, []);
 
-  // Sync Task-specific Data
+  // Sync Task-specific Data from Supabase
   useEffect(() => {
-    if (isAuthenticated && currentUser && currentTask) {
-      const storageKey = `annotate_data_${currentUser.email}`;
-      const savedData = localStorage.getItem(storageKey);
-      if (savedData) {
-        try {
-          const parsed = JSON.parse(savedData) as Record<string, any>;
-          setCompletedTaskIds(parsed.completedTaskIds || []);
+    const loadTaskData = async () => {
+      if (!isAuthenticated || !currentUser || !currentTask) return;
 
-          const taskData = parsed[currentTask.id] || {
-            annotations: [],
-            imageAnnotations: {},
-            culturalScore: 0,
-            languageSimilarity: 'na',
-            languageSimilarityJustification: ''
-          };
-          setAnnotations(taskData.annotations || []);
-          setImageAnnotations(taskData.imageAnnotations || {});
-          setCulturalScore(taskData.culturalScore || 0);
-          setLanguageSimilarity(taskData.languageSimilarity || 'na');
-          setLanguageSimilarityJustification(taskData.languageSimilarityJustification || '');
-        } catch (e) {
-          console.error("Failed to parse user data", e);
+      try {
+        if (!supabaseService.supabase) {
+          // Fallback to localStorage
+          const storageKey = `annotate_data_${currentUser.email}`;
+          const savedData = localStorage.getItem(storageKey);
+          if (savedData) {
+            try {
+              const parsed = JSON.parse(savedData) as Record<string, any>;
+              setCompletedTaskIds(parsed.completedTaskIds || []);
+
+              const taskData = parsed[currentTask.id] || {
+                annotations: [],
+                imageAnnotations: {},
+                culturalScore: 0,
+                languageSimilarity: 'na',
+                languageSimilarityJustification: ''
+              };
+              setAnnotations(taskData.annotations || []);
+              setImageAnnotations(taskData.imageAnnotations || {});
+              setCulturalScore(taskData.culturalScore || 0);
+              setLanguageSimilarity(taskData.languageSimilarity || 'na');
+              setLanguageSimilarityJustification(taskData.languageSimilarityJustification || '');
+            } catch (e) {
+              console.error("Failed to parse user data", e);
+            }
+          } else {
+            setCompletedTaskIds([]);
+            setAnnotations([]);
+            setImageAnnotations({});
+          }
+          return;
         }
-      } else {
-        setCompletedTaskIds([]);
-        setAnnotations([]);
-        setImageAnnotations({});
+
+        // Fetch from Supabase
+        const [completedIds, annotationsData, imageAnnotationsData, submission] = await Promise.all([
+          supabaseService.fetchCompletedTaskIds(),
+          supabaseService.fetchAnnotations(currentTask.id),
+          supabaseService.fetchImageAnnotations(currentTask.id),
+          supabaseService.fetchTaskSubmission(currentTask.id)
+        ]);
+
+        setCompletedTaskIds(completedIds);
+        setAnnotations(annotationsData);
+        setImageAnnotations(imageAnnotationsData);
+
+        if (submission) {
+          setCulturalScore(submission.cultural_score || 0);
+          setLanguageSimilarity(submission.language_similarity || 'na');
+          setLanguageSimilarityJustification(submission.language_similarity_justification || '');
+        } else {
+          setCulturalScore(0);
+          setLanguageSimilarity('na');
+          setLanguageSimilarityJustification('');
+        }
+      } catch (error) {
+        console.error('Error loading task data:', error);
       }
-    }
+    };
+
+    loadTaskData();
   }, [isAuthenticated, currentUser, currentTaskIndex, currentTask?.id]);
 
-  // Global Log Persistence
+  // Save annotations and task data to Supabase
   useEffect(() => {
-    if (isAuthenticated && currentUser && currentTask) {
-      const storageKey = `annotate_data_${currentUser.email}`;
-      const savedDataStr = localStorage.getItem(storageKey);
-      let allUserData = savedDataStr ? JSON.parse(savedDataStr) as Record<string, any> : {};
+    const saveTaskData = async () => {
+      if (!isAuthenticated || !currentUser || !currentTask) return;
 
-      allUserData.completedTaskIds = completedTaskIds;
-      allUserData[currentTask.id] = {
-        annotations,
-        imageAnnotations,
-        culturalScore,
-        languageSimilarity,
-        languageSimilarityJustification
-      };
-      localStorage.setItem(storageKey, JSON.stringify(allUserData));
+      try {
+        if (!supabaseService.supabase) {
+          // Fallback to localStorage
+          const storageKey = `annotate_data_${currentUser.email}`;
+          const savedDataStr = localStorage.getItem(storageKey);
+          let allUserData = savedDataStr ? JSON.parse(savedDataStr) as Record<string, any> : {};
 
-      const taggedAnnos = annotations.map(a => ({ ...a, userEmail: currentUser.email, taskId: currentTask.id }));
-      syncGlobalLog(currentUser.email, currentTask.id, taggedAnnos);
-    }
+          allUserData.completedTaskIds = completedTaskIds;
+          allUserData[currentTask.id] = {
+            annotations,
+            imageAnnotations,
+            culturalScore,
+            languageSimilarity,
+            languageSimilarityJustification
+          };
+          localStorage.setItem(storageKey, JSON.stringify(allUserData));
+
+          const taggedAnnos = annotations.map(a => ({ ...a, userEmail: currentUser.email, taskId: currentTask.id }));
+          syncGlobalLog(currentUser.email, currentTask.id, taggedAnnos);
+          return;
+        }
+
+        // Save to Supabase
+        await Promise.all([
+          supabaseService.saveAnnotations(currentTask.id, annotations),
+          supabaseService.saveImageAnnotations(currentTask.id, imageAnnotations),
+          supabaseService.saveTaskSubmission(
+            currentTask.id,
+            culturalScore,
+            languageSimilarity,
+            languageSimilarityJustification
+          )
+        ]);
+      } catch (error) {
+        console.error('Error saving task data:', error);
+      }
+    };
+
+    saveTaskData();
   }, [annotations, imageAnnotations, culturalScore, languageSimilarity, languageSimilarityJustification, completedTaskIds, isAuthenticated, currentUser, currentTaskIndex, currentTask?.id]);
 
   useEffect(() => {
@@ -628,46 +720,70 @@ const App: React.FC = () => {
   };
 
   // Auth Handling
-  const handleAuth = (e: React.FormEvent) => {
+  const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    const currentUsers = JSON.parse(localStorage.getItem('annotate_users') || '[]') as any[];
 
-    if (isRegistering) {
-      if (formData.password !== formData.confirmPassword) {
-        setError('Passwords do not match');
-        return;
-      }
-      if (currentUsers.find((u: any) => u.email === formData.email)) {
-        setError('Email already registered');
-        return;
-      }
-      const newUser: User = {
-        name: formData.name,
-        email: formData.email,
-        password: formData.password,
-        role: formData.role
-      };
-      const updatedUsers = [...currentUsers, newUser];
-      setUsers(updatedUsers);
-      localStorage.setItem('annotate_users', JSON.stringify(updatedUsers));
-      setCurrentUser(newUser);
-      setIsAuthenticated(true);
-      setViewMode(newUser.role === 'admin' ? 'admin' : 'workspace');
-    } else {
-      const user = currentUsers.find((u: any) => u.email === formData.email && u.password === formData.password);
-      if (user) {
-        setCurrentUser(user);
-        setIsAuthenticated(true);
-        setViewMode(user.role === 'admin' ? 'admin' : 'workspace');
+    try {
+      if (isRegistering) {
+        if (formData.password !== formData.confirmPassword) {
+          setError(t('auth_error_passwords', language));
+          return;
+        }
+
+        const { data, error } = await supabaseService.signUp(
+          formData.email,
+          formData.password,
+          formData.name,
+          formData.role
+        );
+
+        if (error) {
+          if (error.message.includes('already registered')) {
+            setError(t('auth_error_email_exists', language));
+          } else {
+            setError(error.message);
+          }
+          return;
+        }
+
+        // Get the user profile
+        const user = await supabaseService.getCurrentUser();
+        if (user) {
+          setCurrentUser(user);
+          setIsAuthenticated(true);
+          setViewMode(user.role === 'admin' ? 'admin' : 'workspace');
+        }
       } else {
-        setError('Invalid email or password');
+        const { data, error } = await supabaseService.signIn(
+          formData.email,
+          formData.password
+        );
+
+        if (error) {
+          setError(t('auth_error_invalid', language));
+          return;
+        }
+
+        // Get the user profile
+        const user = await supabaseService.getCurrentUser();
+        if (user) {
+          setCurrentUser(user);
+          setIsAuthenticated(true);
+          setViewMode(user.role === 'admin' ? 'admin' : 'workspace');
+        } else {
+          setError(t('auth_error_invalid', language));
+        }
       }
+    } catch (err) {
+      console.error('Auth error:', err);
+      setError('An unexpected error occurred');
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     stopAudio();
+    await supabaseService.signOut();
     setIsAuthenticated(false);
     setCurrentUser(null);
     setAnnotations([]);
@@ -1013,17 +1129,6 @@ const App: React.FC = () => {
                 <div>
                   <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('name', language)}</label>
                   <input type="text" required className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none text-slate-800" placeholder="John Doe" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
-                </div>
-                <div>
-                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('role', language)}</label>
-                  <select
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none text-slate-800 font-bold"
-                    value={formData.role}
-                    onChange={(e) => setFormData({ ...formData, role: e.target.value as UserRole })}
-                  >
-                    <option value="annotator">{t('annotator', language)}</option>
-                    <option value="admin">{t('admin', language)}</option>
-                  </select>
                 </div>
               </>
             )}
