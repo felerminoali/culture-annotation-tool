@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Annotation, SelectionState, ImageAnnotation, ShapeType, DecisionStatus, User, TaskAssignment, UserRole, Project, Task, ProjectAssignment, Language } from './types';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { Annotation, SelectionState, ImageAnnotation, ShapeType, DecisionStatus, User, TaskAssignment, UserRole, Project, Task, ProjectAssignment, Language, UserTaskSubmission } from './types';
 import TextDisplay from './components/TextDisplay';
 import AnnotationModal from './components/AnnotationModal';
 import TextIssueModal from './components/TextIssueModal';
@@ -10,7 +10,7 @@ import ImageWithPinpoints from './components/ImageWithPinpoints';
 import GuidelinesModal from './components/GuidelinesModal';
 import ProfileModal from './components/ProfileModal';
 import AdminDashboard from './components/AdminDashboard';
-import { getSmartSuggestions, getTextToSpeech, decodeBase64, decodeAudioData } from './services/geminiService';
+import { getSmartSuggestions } from './services/geminiService'; // Removed getTextToSpeech as per requirement to replace it with native audio
 import { t, TranslationKey } from './services/i18n';
 import * as supabaseService from './services/supabaseService';
 
@@ -32,6 +32,7 @@ const App: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projectAssignments, setProjectAssignments] = useState<ProjectAssignment[]>([]);
+  const [allTaskSubmissions, setAllTaskSubmissions] = useState<UserTaskSubmission[]>([]); // For Admin Dashboard agreement
 
   // Form State
   const [formData, setFormData] = useState({
@@ -73,11 +74,11 @@ const App: React.FC = () => {
   const [adminProjectFilter, setAdminProjectFilter] = useState<string | null>(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
-  // Audio State
+  // Audio State (Refactored to native HTML audio element, no more complex decoding)
   const [playingParaIdx, setPlayingParaIdx] = useState<number | null>(null);
-  const [isAudioLoading, setIsAudioLoading] = useState<number | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const currentSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null); // Still keeping ref but not actively using for TTS.
+  const currentSourceRef = useRef<AudioBufferSourceNode | null>(null); // Still keeping ref but not actively using for TTS.
+
 
   // Filter TASKS based on assignment if not admin
   const visibleTasks = useMemo(() => {
@@ -111,22 +112,17 @@ const App: React.FC = () => {
 
   const allFilteredTasksCompleted = visibleTasks.length > 0 && visibleTasks.every(t => completedTaskIds.includes(t.id));
 
-  const currentTask = visibleTasks[currentTaskIndex] || tasks[0];
+  const currentTask = visibleTasks[currentTaskIndex];
   const isTaskSubmitted = currentTask ? completedTaskIds.includes(currentTask.id) : false;
 
   const paragraphs = useMemo(() => {
     if (!currentTask) return [];
     const result: { text: string; offset: number }[] = [];
     const splitRegex = /\n\s*\n/;
-    let currentOffset = 0;
-
-    // We split but keep track of where each piece starts
-    const rawParts = currentTask.text.split(splitRegex);
     let searchStartIndex = 0;
 
-    rawParts.forEach(part => {
+    currentTask.text.split(splitRegex).forEach(part => {
       if (part.trim() !== "") {
-        // Find actual index in original text to be precise (handles any whitespace variations)
         const index = currentTask.text.indexOf(part, searchStartIndex);
         if (index !== -1) {
           result.push({ text: part, offset: index });
@@ -134,7 +130,6 @@ const App: React.FC = () => {
         }
       }
     });
-
     return result;
   }, [currentTask]);
 
@@ -146,48 +141,61 @@ const App: React.FC = () => {
   // Flatten image annotations for sidebar list
   const flatImageAnnotations = useMemo(() => {
     return (Object.entries(imageAnnotations) as [string, ImageAnnotation[]][]).flatMap(([paraIdx, annos]) =>
-      annos.map(a => ({ ...a, paraIdx: parseInt(paraIdx) }))
+      annos.map(a => ({ ...a, paragraph_index: parseInt(paraIdx) }))
     );
   }, [imageAnnotations]);
 
+  // --- Auth Effect ---
+  useEffect(() => {
+    const checkUser = async () => {
+      if (!supabaseService.supabase) {
+        // In a real app, you might have a more robust offline mode or a clearer error message.
+        setError('Supabase is not configured. Please check your environment variables.');
+        return;
+      }
+
+      const user = await supabaseService.getCurrentUser();
+      if (user) {
+        setCurrentUser(user);
+        setIsAuthenticated(true);
+        setViewMode(user.role === 'admin' ? 'admin' : 'workspace');
+      } else {
+        setIsAuthenticated(false);
+        setCurrentUser(null);
+      }
+    };
+    checkUser();
+
+    // Listen for auth changes
+    const { data: authListener } = supabaseService.supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+          checkUser();
+        } else if (event === 'SIGNED_OUT') {
+          handleLogout(); // Ensure full reset on sign out
+        }
+      }
+    );
+
+    return () => {
+      authListener?.subscription.unsubscribe();
+    };
+  }, []); // Run once on mount
+
   // Sync Global Resources from Supabase
   useEffect(() => {
+    if (!isAuthenticated || !currentUser || !supabaseService.supabase) return;
+
     const loadGlobalResources = async () => {
       try {
-        // Check if Supabase is configured
-        if (!supabaseService.supabase) {
-          console.warn('Supabase not configured, using localStorage fallback');
-          // Fallback to localStorage
-          const savedUsers = localStorage.getItem('annotate_users');
-          if (savedUsers) setUsers(JSON.parse(savedUsers) as User[]);
-
-          const savedAssignments = localStorage.getItem('annotate_assignments');
-          if (savedAssignments) setAssignments(JSON.parse(savedAssignments) as TaskAssignment[]);
-
-          const savedLog = localStorage.getItem('annotate_global_log');
-          if (savedLog) setGlobalLog(JSON.parse(savedLog) as Annotation[]);
-
-          const savedProjects = localStorage.getItem('annotate_projects');
-          if (savedProjects) setProjects(JSON.parse(savedProjects) as Project[]);
-
-          const savedTasks = localStorage.getItem('annotate_tasks');
-          setTasks(savedTasks ? JSON.parse(savedTasks) as Task[] : []);
-
-          const savedProjectAssignments = localStorage.getItem('annotate_project_assignments');
-          if (savedProjectAssignments) setProjectAssignments(JSON.parse(savedProjectAssignments) as ProjectAssignment[]);
-
-          const savedLang = localStorage.getItem('annotate_language') as Language;
-          if (savedLang) setLanguage(savedLang);
-          return;
-        }
-
-        // Fetch from Supabase
-        const [usersData, projectsData, tasksData, projectAssignmentsData, taskAssignmentsData] = await Promise.all([
+        const [usersData, projectsData, tasksData, projectAssignmentsData, taskAssignmentsData, globalAnnotationsData, allSubmissionsData] = await Promise.all([
           supabaseService.fetchUsers(),
           supabaseService.fetchProjects(),
           supabaseService.fetchTasks(),
           supabaseService.fetchProjectAssignments(),
-          supabaseService.fetchTaskAssignments()
+          supabaseService.fetchTaskAssignments(),
+          supabaseService.fetchAllAnnotations(),
+          supabaseService.fetchAllUserTaskSubmissions()
         ]);
 
         setUsers(usersData);
@@ -195,62 +203,31 @@ const App: React.FC = () => {
         setTasks(tasksData);
         setProjectAssignments(projectAssignmentsData);
         setAssignments(taskAssignmentsData);
+        setGlobalLog(globalAnnotationsData);
+        setAllTaskSubmissions(allSubmissionsData);
 
-        // Language preference still from localStorage
         const savedLang = localStorage.getItem('annotate_language') as Language;
         if (savedLang) setLanguage(savedLang);
+
       } catch (error) {
         console.error('Error loading global resources:', error);
       }
     };
 
     loadGlobalResources();
-  }, []);
+  }, [isAuthenticated, currentUser?.id]); // Rerun if auth status or user changes
 
   // Sync Task-specific Data from Supabase
   useEffect(() => {
+    if (!isAuthenticated || !currentUser || !currentTask || !supabaseService.supabase) return;
+
     const loadTaskData = async () => {
-      if (!isAuthenticated || !currentUser || !currentTask) return;
-
       try {
-        if (!supabaseService.supabase) {
-          // Fallback to localStorage
-          const storageKey = `annotate_data_${currentUser.email}`;
-          const savedData = localStorage.getItem(storageKey);
-          if (savedData) {
-            try {
-              const parsed = JSON.parse(savedData) as Record<string, any>;
-              setCompletedTaskIds(parsed.completedTaskIds || []);
-
-              const taskData = parsed[currentTask.id] || {
-                annotations: [],
-                imageAnnotations: {},
-                culturalScore: 0,
-                languageSimilarity: 'na',
-                languageSimilarityJustification: ''
-              };
-              setAnnotations(taskData.annotations || []);
-              setImageAnnotations(taskData.imageAnnotations || {});
-              setCulturalScore(taskData.culturalScore || 0);
-              setLanguageSimilarity(taskData.languageSimilarity || 'na');
-              setLanguageSimilarityJustification(taskData.languageSimilarityJustification || '');
-            } catch (e) {
-              console.error("Failed to parse user data", e);
-            }
-          } else {
-            setCompletedTaskIds([]);
-            setAnnotations([]);
-            setImageAnnotations({});
-          }
-          return;
-        }
-
-        // Fetch from Supabase
         const [completedIds, annotationsData, imageAnnotationsData, submission] = await Promise.all([
-          supabaseService.fetchCompletedTaskIds(),
-          supabaseService.fetchAnnotations(currentTask.id),
-          supabaseService.fetchImageAnnotations(currentTask.id),
-          supabaseService.fetchTaskSubmission(currentTask.id)
+          supabaseService.fetchCompletedTaskIds(currentUser.id!), // Fetch for current user
+          supabaseService.fetchAnnotations(currentTask.id, currentUser.id!),
+          supabaseService.fetchImageAnnotations(currentTask.id, currentUser.id!),
+          supabaseService.fetchTaskSubmission(currentTask.id, currentUser.id!)
         ]);
 
         setCompletedTaskIds(completedIds);
@@ -268,216 +245,240 @@ const App: React.FC = () => {
         }
       } catch (error) {
         console.error('Error loading task data:', error);
+        // Reset current task data on error to prevent displaying stale info
+        setAnnotations([]);
+        setImageAnnotations({});
+        setCulturalScore(0);
+        setLanguageSimilarity('na');
+        setLanguageSimilarityJustification('');
       }
     };
 
     loadTaskData();
-  }, [isAuthenticated, currentUser, currentTaskIndex, currentTask?.id]);
+  }, [isAuthenticated, currentUser, currentTask?.id]); // Rerun when currentTask changes
 
-  // Save annotations and task data to Supabase
+  // Save current task data to Supabase (debounced or on explicit actions)
+  // This useEffect will be triggered when annotations, imageAnnotations etc. change
+  // For a real-time app, you might debounce this or save on explicit user actions.
+  // For now, we'll let it save on state changes, which might be too frequent.
+  // A better approach would be to only call `saveTaskSubmission` and `saveAnnotations`/`saveImageAnnotations`
+  // when the user explicitly commits a change or completes the task.
   useEffect(() => {
-    const saveTaskData = async () => {
-      if (!isAuthenticated || !currentUser || !currentTask) return;
+    if (!isAuthenticated || !currentUser || !currentTask || !supabaseService.supabase) return;
 
+    const timer = setTimeout(async () => {
       try {
-        if (!supabaseService.supabase) {
-          // Fallback to localStorage
-          const storageKey = `annotate_data_${currentUser.email}`;
-          const savedDataStr = localStorage.getItem(storageKey);
-          let allUserData = savedDataStr ? JSON.parse(savedDataStr) as Record<string, any> : {};
+        await supabaseService.saveTaskSubmission(
+          currentTask.id,
+          currentUser.id!,
+          culturalScore,
+          languageSimilarity,
+          languageSimilarityJustification
+        );
+        await supabaseService.saveAnnotations(currentTask.id, currentUser.id!, annotations);
+        await supabaseService.saveImageAnnotations(currentTask.id, currentUser.id!, imageAnnotations);
 
-          allUserData.completedTaskIds = completedTaskIds;
-          allUserData[currentTask.id] = {
-            annotations,
-            imageAnnotations,
-            culturalScore,
-            languageSimilarity,
-            languageSimilarityJustification
-          };
-          localStorage.setItem(storageKey, JSON.stringify(allUserData));
+        // After saving, re-fetch global submissions to update agreement dashboard
+        const updatedSubmissions = await supabaseService.fetchAllUserTaskSubmissions();
+        setAllTaskSubmissions(updatedSubmissions);
 
-          const taggedAnnos = annotations.map(a => ({ ...a, userEmail: currentUser.email, taskId: currentTask.id }));
-          syncGlobalLog(currentUser.email, currentTask.id, taggedAnnos);
-          return;
-        }
-
-        // Save to Supabase
-        await Promise.all([
-          supabaseService.saveAnnotations(currentTask.id, annotations),
-          supabaseService.saveImageAnnotations(currentTask.id, imageAnnotations),
-          supabaseService.saveTaskSubmission(
-            currentTask.id,
-            culturalScore,
-            languageSimilarity,
-            languageSimilarityJustification
-          )
-        ]);
       } catch (error) {
         console.error('Error saving task data:', error);
       }
-    };
+    }, 1000); // Debounce saves by 1 second
 
-    saveTaskData();
-  }, [annotations, imageAnnotations, culturalScore, languageSimilarity, languageSimilarityJustification, completedTaskIds, isAuthenticated, currentUser, currentTaskIndex, currentTask?.id]);
+    return () => clearTimeout(timer);
+  }, [annotations, imageAnnotations, culturalScore, languageSimilarity, languageSimilarityJustification,
+    isAuthenticated, currentUser, currentTask?.id]);
 
   useEffect(() => {
     localStorage.setItem('annotate_language', language);
   }, [language]);
 
-  const syncGlobalLog = (email: string, taskId: string, taskAnnos: Annotation[]) => {
-    const key = 'annotate_global_log';
-    let currentLog = JSON.parse(localStorage.getItem(key) || '[]') as any[];
-    currentLog = currentLog.filter((a: any) => !(a.userEmail === email && a.taskId === taskId));
-    const newLog = [...currentLog, ...taskAnnos];
-    localStorage.setItem(key, JSON.stringify(newLog));
-    setGlobalLog(newLog);
-  };
+  // --- Admin Operations (moved to App.tsx to centralize Supabase calls) ---
 
-  const addProject = (project: Project) => {
-    const updated = [...projects, project];
-    setProjects(updated);
-    localStorage.setItem('annotate_projects', JSON.stringify(updated));
-  };
+  const addUser = useCallback(async (newUser: User) => {
+    if (!supabaseService.supabase) return;
+    try {
+      const { data, error: signUpError } = await supabaseService.signUp(newUser.email, newUser.password!, newUser.name, newUser.role);
+      if (signUpError) throw signUpError;
+      // After successful signup, fetch users again to get the new user with their ID
+      const updatedUsers = await supabaseService.fetchUsers();
+      setUsers(updatedUsers);
+    } catch (error: any) {
+      console.error('Error adding user:', error.message);
+      setError(error.message);
+    }
+  }, []);
 
-  const updateProject = (id: string, updates: Partial<Project>) => {
-    const updated = projects.map(p => p.id === id ? { ...p, ...updates } : p);
-    setProjects(updated);
-    localStorage.setItem('annotate_projects', JSON.stringify(updated));
-  };
+  const deleteUser = useCallback(async (email: string) => {
+    if (!supabaseService.supabase) return;
+    try {
+      const { error } = await supabaseService.deleteUser(email);
+      if (error) throw error;
+      setUsers(prev => prev.filter(u => u.email !== email));
+      setAssignments(prev => prev.filter(a => a.assignedToEmail !== email)); // Clean up assignments
+      setProjectAssignments(prev => prev.filter(pa => pa.assignedToEmail !== email)); // Clean up project assignments
+      // Also need to delete all annotations/submissions by this user.
+      // Supabase RLS or cascade deletes should handle this.
+    } catch (error: any) {
+      console.error('Error deleting user:', error.message);
+      setError(error.message);
+    }
+  }, []);
 
-  const deleteProject = (id: string) => {
-    // 1. Delete the Project
-    const updatedProjects = projects.filter(p => p.id !== id);
-    setProjects(updatedProjects);
-    localStorage.setItem('annotate_projects', JSON.stringify(updatedProjects));
-
-    // 2. Identify Tasks to Delete
-    const tasksToDelete = tasks.filter(t => t.projectId === id);
-    const taskIdsToDelete = tasksToDelete.map(t => t.id);
-
-    if (taskIdsToDelete.length === 0) return;
-
-    // 3. Delete Tasks
-    const updatedTasks = tasks.filter(t => t.projectId !== id);
-    setTasks(updatedTasks);
-    localStorage.setItem('annotate_tasks', JSON.stringify(updatedTasks));
-
-    // 4. Delete Project Assignments
-    const updatedProjectAssignments = projectAssignments.filter(pa => pa.projectId !== id);
-    setProjectAssignments(updatedProjectAssignments);
-    localStorage.setItem('annotate_project_assignments', JSON.stringify(updatedProjectAssignments));
-
-    // 5. Delete Task Assignments
-    const updatedAssignments = assignments.filter(a => !taskIdsToDelete.includes(a.taskId));
-    setAssignments(updatedAssignments);
-    localStorage.setItem('annotate_assignments', JSON.stringify(updatedAssignments));
-
-    // 6. Delete Global Log Annotations
-    const updatedGlobalLog = globalLog.filter(a => !taskIdsToDelete.includes(a.taskId));
-    setGlobalLog(updatedGlobalLog);
-    localStorage.setItem('annotate_global_log', JSON.stringify(updatedGlobalLog));
-
-    // 7. Cleanup User Data (Local Annotations)
-    // We need to iterate over all users to clean up their specific data stores
-    const allUsers = JSON.parse(localStorage.getItem('annotate_users') || '[]') as User[];
-    allUsers.forEach(user => {
-      const key = `annotate_data_${user.email}`;
-      const userDataStr = localStorage.getItem(key);
-      if (userDataStr) {
-        try {
-          const userData = JSON.parse(userDataStr);
-          let changed = false;
-
-          // Remove task data
-          taskIdsToDelete.forEach(tid => {
-            if (userData[tid]) {
-              delete userData[tid];
-              changed = true;
-            }
-          });
-
-          // Remove from completed IDs
-          if (userData.completedTaskIds) {
-            const originalLen = userData.completedTaskIds.length;
-            userData.completedTaskIds = userData.completedTaskIds.filter((tid: string) => !taskIdsToDelete.includes(tid));
-            if (userData.completedTaskIds.length !== originalLen) changed = true;
-          }
-
-          if (changed) {
-            localStorage.setItem(key, JSON.stringify(userData));
-          }
-        } catch (e) {
-          console.error(`Failed to cleanup data for user ${user.email}`, e);
-        }
+  const updateRole = useCallback(async (email: string, role: UserRole) => {
+    if (!supabaseService.supabase) return;
+    try {
+      const { error } = await supabaseService.updateUserRole(email, role);
+      if (error) throw error;
+      setUsers(prev => prev.map(u => u.email === email ? { ...u, role } : u));
+      if (email === currentUser?.email) {
+        setCurrentUser(prev => prev ? { ...prev, role } : null);
       }
-    });
-
-    // Refresh current user data if needed
-    if (currentUser) {
-      const key = `annotate_data_${currentUser.email}`;
-      const userData = JSON.parse(localStorage.getItem(key) || '{}');
-      setCompletedTaskIds(userData.completedTaskIds || []);
-      setAnnotations([]);
-      setImageAnnotations({});
+    } catch (error: any) {
+      console.error('Error updating role:', error.message);
+      setError(error.message);
     }
-  };
+  }, [currentUser]);
 
-  const addTask = (task: Task) => {
-    const updated = [...tasks, task];
-    setTasks(updated);
-    localStorage.setItem('annotate_tasks', JSON.stringify(updated));
-  };
-
-  const updateTask = (id: string, updates: Partial<Task>) => {
-    const updated = tasks.map(t => t.id === id ? { ...t, ...updates } : t);
-    setTasks(updated);
-    localStorage.setItem('annotate_tasks', JSON.stringify(updated));
-  };
-
-  const deleteTask = (id: string) => {
-    const updated = tasks.filter(t => t.id !== id);
-    setTasks(updated);
-    localStorage.setItem('annotate_tasks', JSON.stringify(updated));
-    const newAssignments = assignments.filter(a => a.taskId !== id);
-    setAssignments(newAssignments);
-    localStorage.setItem('annotate_assignments', JSON.stringify(newAssignments));
-  };
-
-  const assignProject = (projectId: string, email: string) => {
-    // Remove existing assignment for this user on this project
-    const updated = projectAssignments.filter(pa => !(pa.projectId === projectId && pa.assignedToEmail === email));
-
-    // If not unassigning (which we might support later, but for now assuming 'add' logic or 'toggle')
-    // Let's implement simpler: Add if not exists, Remove if exists? Or just explicit assign.
-    // The previous pattern for assignTask used "email !== 'all'" to push.
-    // Let's assume we want to support multiple users per project.
-
-    // Note: The UI for projects is likely "Add User to Project".
-    // Let's support: assign mean "ensure this tuple exists"
-
-    if (!updated.some(pa => pa.projectId === projectId && pa.assignedToEmail === email)) {
-      updated.push({ projectId, assignedToEmail: email });
+  const assignTask = useCallback(async (taskId: string, email: string) => {
+    if (!supabaseService.supabase) return;
+    try {
+      const { error } = await supabaseService.upsertTaskAssignment(taskId, email);
+      if (error) throw error;
+      const updatedAssignments = await supabaseService.fetchTaskAssignments();
+      setAssignments(updatedAssignments);
+    } catch (error: any) {
+      console.error('Error assigning task:', error.message);
+      setError(error.message);
     }
+  }, []);
 
-    setProjectAssignments(updated);
-    localStorage.setItem('annotate_project_assignments', JSON.stringify(updated));
-  };
+  const addProject = useCallback(async (project: Omit<Project, 'id' | 'createdAt'>) => {
+    if (!supabaseService.supabase) return;
+    try {
+      const newProject = await supabaseService.createProject(project);
+      if (newProject) {
+        setProjects(prev => [...prev, newProject]);
+      }
+    } catch (error: any) {
+      console.error('Error adding project:', error.message);
+      setError(error.message);
+    }
+  }, []);
 
-  const removeProjectAssignment = (projectId: string, email: string) => {
-    const updated = projectAssignments.filter(pa => !(pa.projectId === projectId && pa.assignedToEmail === email));
-    setProjectAssignments(updated);
-    localStorage.setItem('annotate_project_assignments', JSON.stringify(updated));
-  };
+  const updateProject = useCallback(async (id: string, updates: Partial<Project>) => {
+    if (!supabaseService.supabase) return;
+    try {
+      const { error } = await supabaseService.updateProject(id, updates);
+      if (error) throw error;
+      setProjects(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
+    } catch (error: any) {
+      console.error('Error updating project:', error.message);
+      setError(error.message);
+    }
+  }, []);
+
+  const deleteProject = useCallback(async (id: string) => {
+    if (!supabaseService.supabase) return;
+    try {
+      const { error } = await supabaseService.deleteProject(id);
+      if (error) throw error;
+      setProjects(prev => prev.filter(p => p.id !== id));
+      setTasks(prev => prev.filter(t => t.projectId !== id));
+      setProjectAssignments(prev => prev.filter(pa => pa.projectId !== id));
+      setAssignments(prev => prev.filter(a => tasks.filter(t => t.projectId === id).some(task => task.id === a.taskId)));
+      setGlobalLog(prev => prev.filter(a => tasks.filter(t => t.projectId === id).some(task => task.id === a.taskId)));
+    } catch (error: any) {
+      console.error('Error deleting project:', error.message);
+      setError(error.message);
+    }
+  }, [tasks]);
+
+  const addTask = useCallback(async (task: Omit<Task, 'id'>) => {
+    if (!supabaseService.supabase) return;
+    try {
+      const newTask = await supabaseService.createTask(task);
+      if (newTask) {
+        setTasks(prev => [...prev, newTask]);
+      }
+    } catch (error: any) {
+      console.error('Error adding task:', error.message);
+      setError(error.message);
+    }
+  }, []);
+
+  const updateTask = useCallback(async (id: string, updates: Partial<Task>) => {
+    if (!supabaseService.supabase) return;
+    try {
+      const { error } = await supabaseService.updateTask(id, updates);
+      if (error) throw error;
+      setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+    } catch (error: any) {
+      console.error('Error updating task:', error.message);
+      setError(error.message);
+    }
+  }, []);
+
+  const deleteTask = useCallback(async (id: string) => {
+    if (!supabaseService.supabase) return;
+    try {
+      const { error } = await supabaseService.deleteTask(id);
+      if (error) throw error;
+      setTasks(prev => prev.filter(t => t.id !== id));
+      setAssignments(prev => prev.filter(a => a.taskId !== id));
+      setGlobalLog(prev => prev.filter(a => a.taskId !== id));
+    } catch (error: any) {
+      console.error('Error deleting task:', error.message);
+      setError(error.message);
+    }
+  }, []);
+
+  const assignProject = useCallback(async (projectId: string, email: string) => {
+    if (!supabaseService.supabase) return;
+    try {
+      const user = users.find(u => u.email === email);
+      if (!user?.id) throw new Error('User not found for assignment');
+      const { error } = await supabaseService.upsertProjectAssignment(projectId, user.id);
+      if (error) throw error;
+      const updatedAssignments = await supabaseService.fetchProjectAssignments();
+      setProjectAssignments(updatedAssignments);
+    } catch (error: any) {
+      console.error('Error assigning project:', error.message);
+      setError(error.message);
+    }
+  }, [users]);
+
+  const removeProjectAssignment = useCallback(async (projectId: string, email: string) => {
+    if (!supabaseService.supabase) return;
+    try {
+      const user = users.find(u => u.email === email);
+      if (!user?.id) throw new Error('User not found for de-assignment');
+      const { error } = await supabaseService.deleteProjectAssignment(projectId, user.id);
+      if (error) throw error;
+      setProjectAssignments(prev => prev.filter(pa => !(pa.projectId === projectId && pa.assignedToEmail === email)));
+    } catch (error: any) {
+      console.error('Error removing project assignment:', error.message);
+      setError(error.message);
+    }
+  }, [users]);
 
   // --- PROJECT EXPORT / IMPORT ---
 
-  const handleExportProject = (projectId: string) => {
+  const handleExportProject = async (projectId: string) => {
+    if (!supabaseService.supabase) return;
+
     const project = projects.find(p => p.id === projectId);
     if (!project) return;
 
     const projectTasks = tasks.filter(t => t.projectId === projectId);
+    const taskIds = projectTasks.map(t => t.id);
 
-    // Format tasks to include paragraphs list and audio placeholder
+    const allProjectSubmissions = await supabaseService.fetchSubmissionsForTasks(taskIds);
+    const allProjectAnnotations = await supabaseService.fetchAnnotationsForTasks(taskIds);
+    const allProjectImageAnnotations = await supabaseService.fetchImageAnnotationsForTasks(taskIds);
+
     const formattedTasks = projectTasks.map(t => {
       const paragraphs = t.text.split(/\n\s*\n/).filter(p => p.trim() !== "");
       return {
@@ -485,71 +486,67 @@ const App: React.FC = () => {
         paragraphs,
         paragrah_number: paragraphs.length,
         image_number: t.images?.length || 0,
-        audio: t.audio || []
       };
     });
 
     const annotatorUsers = users.filter(u => u.role === 'annotator');
-
-    const allUserAnnotations: any[] = [];
+    const allUserExportData: any[] = [];
 
     annotatorUsers.forEach(user => {
-      const key = `annotate_data_${user.email}`;
-      const userDataStr = localStorage.getItem(key);
-      if (userDataStr) {
-        try {
-          const userData = JSON.parse(userDataStr);
-          const userExportData = {
-            userEmail: user.email,
-            completedTaskIds: userData.completedTaskIds?.filter((tid: string) => projectTasks.some(pt => pt.id === tid)) || [],
-            taskData: {} as Record<string, any>
-          };
+      const userSubmissions = allProjectSubmissions.filter(s => s.userId === user.id);
+      const userAnnotations = allProjectAnnotations.filter(a => a.userId === user.id);
+      const userImageAnnotations = allProjectImageAnnotations.filter(ia => ia.userId === user.id);
 
-          projectTasks.forEach(task => {
-            if (userData[task.id]) {
-              const taskData = { ...userData[task.id] };
+      const userExportData = {
+        userEmail: user.email,
+        userId: user.id,
+        completedTaskIds: userSubmissions.filter(s => s.completed).map(s => s.taskId),
+        taskData: {} as Record<string, any>
+      };
 
-              const taskParagraphs = task.text.split(/\n\s*\n/).filter(p => p.trim() !== "").map((p, idx) => {
-                // We need to re-find the offsets to match the App's paragraph logic
-                const index = task.text.indexOf(p);
-                return { text: p, offset: index };
-              });
+      projectTasks.forEach(task => {
+        const taskSubmission = userSubmissions.find(s => s.taskId === task.id);
+        const taskAnnos = userAnnotations.filter(a => a.taskId === task.id);
+        const taskImageAnnos = userImageAnnotations.filter(ia => ia.taskId === task.id);
 
-              // Process text annotations to add paragraph index
-              if (taskData.annotations) {
-                taskData.annotations = taskData.annotations.map((anno: any) => {
-                  const paraIdx = taskParagraphs.findIndex(p => anno.start >= p.offset && anno.end <= p.offset + p.text.length);
-                  return {
-                    ...anno,
-                    paragraph: paraIdx !== -1 ? paraIdx + 1 : undefined
-                  };
-                });
-              }
-
-              // Process image annotations to add image/paragraph index
-              if (taskData.imageAnnotations) {
-                const processedImages: Record<string, any[]> = {};
-                Object.entries(taskData.imageAnnotations).forEach(([idx, annos]) => {
-                  processedImages[idx] = (annos as any[]).map(a => ({
-                    ...a,
-                    paragraph: parseInt(idx) + 1,
-                    image_number: parseInt(idx) + 1 // Assuming 1:1 paragraph to image mapping as per current UI
-                  }));
-                });
-                taskData.imageAnnotations = processedImages;
-              }
-
-              (userExportData.taskData as any)[task.id] = taskData;
-            }
+        if (taskSubmission || taskAnnos.length > 0 || taskImageAnnos.length > 0) {
+          const taskParagraphs = task.text.split(/\n\s*\n/).filter(p => p.trim() !== "").map((p, idx) => {
+            const index = task.text.indexOf(p);
+            return { text: p, offset: index };
           });
 
-          // Only add if they have any data for this project
-          if (Object.keys(userExportData.taskData).length > 0 || userExportData.completedTaskIds.length > 0) {
-            allUserAnnotations.push(userExportData);
-          }
-        } catch (e) {
-          console.error(`Failed to export data for user ${user.email}`, e);
+          const processedTextAnnotations = taskAnnos.map(anno => {
+            const paraIdx = taskParagraphs.findIndex(p => anno.start >= p.offset && anno.end <= p.offset + p.text.length);
+            return {
+              ...anno,
+              paragraph: paraIdx !== -1 ? paraIdx + 1 : undefined
+            };
+          });
+
+          const processedImageAnnotations: Record<string, any[]> = {};
+          taskImageAnnos.forEach(anno => {
+            if (!processedImageAnnotations[anno.paragraph_index!]) {
+              processedImageAnnotations[anno.paragraph_index!] = [];
+            }
+            processedImageAnnotations[anno.paragraph_index!].push({
+              ...anno,
+              paragraph: anno.paragraph_index! + 1,
+              image_number: anno.paragraph_index! + 1
+            });
+          });
+
+          userExportData.taskData[task.id] = {
+            annotations: processedTextAnnotations,
+            imageAnnotations: processedImageAnnotations,
+            culturalScore: taskSubmission?.culturalScore || 0,
+            languageSimilarity: taskSubmission?.languageSimilarity || 'na',
+            languageSimilarityJustification: taskSubmission?.languageSimilarityJustification || ''
+          };
         }
+      });
+
+      if (Object.keys(userExportData.taskData).length > 0 || userExportData.completedTaskIds.length > 0) {
+        allUserExportData.push(userExportData);
       }
     });
 
@@ -557,7 +554,7 @@ const App: React.FC = () => {
       version: "1.1",
       project,
       tasks: formattedTasks,
-      annotations: allUserAnnotations
+      annotations: allUserExportData
     };
 
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
@@ -570,6 +567,8 @@ const App: React.FC = () => {
   };
 
   const handleImportProject = async (file: File) => {
+    if (!supabaseService.supabase) return;
+
     try {
       const text_content = await file.text();
       const data = JSON.parse(text_content);
@@ -581,133 +580,99 @@ const App: React.FC = () => {
 
       // 1. Create or Update Project
       const importedProject = data.project;
-      const existingProjectIndex = projects.findIndex(p => p.id === importedProject.id);
-
-      let updatedProjects = [...projects];
-      if (existingProjectIndex >= 0) {
-        // Update
-        updatedProjects[existingProjectIndex] = { ...updatedProjects[existingProjectIndex], ...importedProject };
-      } else {
-        // Create
-        updatedProjects.push(importedProject);
-      }
+      await supabaseService.upsertProject({
+        id: importedProject.id,
+        title: importedProject.title,
+        description: importedProject.description,
+        guideline: importedProject.guideline,
+        createdAt: importedProject.createdAt
+      });
+      const updatedProjects = await supabaseService.fetchProjects();
       setProjects(updatedProjects);
-      localStorage.setItem('annotate_projects', JSON.stringify(updatedProjects));
-
 
       // 2. Create or Update Tasks
-      const currentTasks = JSON.parse(localStorage.getItem('annotate_tasks') || '[]') as Task[];
-      let updatedTasks = [...currentTasks];
-
-      data.tasks.forEach((t: any) => {
-        // Ensure structure matches internal model (handle paragraphs vs text)
-        const taskContent: Task = {
+      for (const t of data.tasks) {
+        await supabaseService.upsertTask({
           id: t.id,
           title: t.title,
           objective: t.objective,
           description: t.description,
-          projectId: t.projectId, // Should match data.project.id
+          projectId: t.projectId,
           text: t.text || (t.paragraphs && Array.isArray(t.paragraphs) ? t.paragraphs.join('\n\n') : ''),
           images: t.images || [],
           audio: t.audio || [],
           question: t.question,
           category: t.category,
-          gender: t.gender
-        };
-
-        const existingTaskIndex = updatedTasks.findIndex(ExistingT => ExistingT.id === taskContent.id);
-        if (existingTaskIndex >= 0) {
-          updatedTasks[existingTaskIndex] = { ...updatedTasks[existingTaskIndex], ...taskContent };
-        } else {
-          updatedTasks.push(taskContent);
-        }
-      });
-      setTasks(updatedTasks);
-      localStorage.setItem('annotate_tasks', JSON.stringify(updatedTasks));
-
-
-      // 3. Create or Update Annotations (Ground Truth)
-      // data.annotations is array of { userEmail, completedTaskIds, taskData }
-      data.annotations.forEach((userImport: any) => {
-        const { userEmail, completedTaskIds, taskData } = userImport;
-        if (!userEmail) return;
-
-        const key = `annotate_data_${userEmail}`;
-        let userData = JSON.parse(localStorage.getItem(key) || '{}');
-
-        // Merge Completed IDs (Set logic)
-        const combinedCompleted = new Set([...(userData.completedTaskIds || []), ...(completedTaskIds || [])]);
-        userData.completedTaskIds = Array.from(combinedCompleted);
-
-        // Merge Task Data (Upsert per task)
-        // We overwrite the specific task's annotations with the imported ones, assuming import is "latest/source of truth"
-        // or we merge? Request says "create/update". 
-        // For annotations list, it's safer to overwrite the list for that task to avoid duplication of same annotations with same IDs.
-        Object.entries(taskData).forEach(([tid, tData]: [string, any]) => {
-          // tData has { annotations: [], imageAnnotations: {} }
-          // If the user already has data for this task, we merge/overwrite
-          const existingTaskData = userData[tid] || { annotations: [], imageAnnotations: {} };
-
-          // For text annotations: using ID to upsert could work, but simply replacing or appending is coarser.
-          // Let's try to be smart: if ID exists, update. If not, add.
-          const incomingAnnos = tData.annotations || [];
-          const currentAnnos = existingTaskData.annotations || [];
-
-          const mergedAnnos = [...currentAnnos];
-          incomingAnnos.forEach((incA: Annotation) => {
-            const idx = mergedAnnos.findIndex(a => a.id === incA.id);
-            if (idx >= 0) {
-              mergedAnnos[idx] = incA;
-            } else {
-              mergedAnnos.push(incA);
-            }
-          });
-
-          // For image annotations: key is string (paraIdx) -> value is array
-          // We need to merge at the object key level
-          const incomingImgAnnos = tData.imageAnnotations || {};
-          const currentImgAnnos = existingTaskData.imageAnnotations || {};
-          const mergedImgAnnos = { ...currentImgAnnos };
-
-          Object.keys(incomingImgAnnos).forEach(paraIdx => {
-            const incList = incomingImgAnnos[paraIdx];
-            const curList = mergedImgAnnos[paraIdx] || [];
-
-            const mergedList = [...curList];
-            incList.forEach((incIA: ImageAnnotation) => {
-              const idx = mergedList.findIndex(a => a.id === incIA.id);
-              if (idx >= 0) {
-                mergedList[idx] = incIA;
-              } else {
-                mergedList.push(incIA);
-              }
-            });
-            mergedImgAnnos[paraIdx] = mergedList;
-          });
-
-
-          userData[tid] = {
-            annotations: mergedAnnos,
-            imageAnnotations: mergedImgAnnos,
-            culturalScore: tData.culturalScore || 0,
-            languageSimilarity: tData.languageSimilarity || 'na',
-            languageSimilarityJustification: tData.languageSimilarityJustification || ''
-          };
+          gender: t.gender,
+          taskType: t.taskType
         });
+      }
+      const updatedTasks = await supabaseService.fetchTasks();
+      setTasks(updatedTasks);
 
-        localStorage.setItem(key, JSON.stringify(userData));
-      });
+      // 3. Create or Update Annotations (Ground Truth) and Submissions
+      for (const userImport of data.annotations) {
+        const { userEmail, userId, completedTaskIds, taskData } = userImport;
+        if (!userEmail || !userId) continue;
 
-      // Update runtime state if relevant to current user
+        for (const taskId of completedTaskIds) {
+          // Ensure a submission exists and mark it as completed (score 0, na for simplicity on import if not specified)
+          await supabaseService.saveTaskSubmission(taskId, userId, 0, 'na', '');
+        }
+
+        for (const [taskId, tData] of Object.entries(taskData)) {
+          const submissionId = await supabaseService.getOrCreateSubmissionId(taskId, userId);
+          if (!submissionId) {
+            console.warn(`Could not get/create submission for task ${taskId} user ${userId}`);
+            continue;
+          }
+
+          // Update submission details
+          await supabaseService.saveTaskSubmission(
+            taskId,
+            userId,
+            (tData as any).culturalScore || 0,
+            (tData as any).languageSimilarity || 'na',
+            (tData as any).languageSimilarityJustification || ''
+          );
+
+          // Save text annotations
+          const incomingAnnos = (tData as any).annotations || [];
+          await supabaseService.saveAnnotations(taskId, userId, incomingAnnos, submissionId);
+
+          // Save image annotations
+          const incomingImgAnnos = (tData as any).imageAnnotations || {};
+          // Convert incomingImgAnnos (Record<string, any[]>) to a flat array for saveImageAnnotationsFlat
+          const flatIncomingImgAnnos: ImageAnnotation[] = Object.entries(incomingImgAnnos).flatMap(([paraIdx, annos]) =>
+            (annos as any[]).map(a => ({ ...a, paragraph_index: parseInt(paraIdx) }))
+          );
+          // Use saveImageAnnotationsFlat which accepts a flat array
+          await supabaseService.saveImageAnnotationsFlat(taskId, userId, flatIncomingImgAnnos, submissionId);
+        }
+      }
+
+      // Re-fetch all data to ensure UI is up-to-date
+      const [updatedAllAnnotations, updatedAllSubmissions] = await Promise.all([
+        supabaseService.fetchAllAnnotations(),
+        supabaseService.fetchAllUserTaskSubmissions()
+      ]);
+      setGlobalLog(updatedAllAnnotations);
+      setAllTaskSubmissions(updatedAllSubmissions);
+
       if (currentUser) {
-        // Refresh global log if needed
-        const myKey = `annotate_data_${currentUser.email}`;
-        const myData = JSON.parse(localStorage.getItem(myKey) || '{}');
-        setCompletedTaskIds(myData.completedTaskIds || []);
-        // We only update the ACTIVE task annotations in state if we have a current task
-        if (currentTask && myData[currentTask.id]) {
-          setAnnotations(myData[currentTask.id].annotations || []);
-          setImageAnnotations(myData[currentTask.id].imageAnnotations || {});
+        const [userCompletedTasks, userAnnotations, userImageAnnotations, userSubmission] = await Promise.all([
+          supabaseService.fetchCompletedTaskIds(currentUser.id!),
+          supabaseService.fetchAnnotations(currentTask?.id || '', currentUser.id!),
+          supabaseService.fetchImageAnnotations(currentTask?.id || '', currentUser.id!),
+          currentTask ? supabaseService.fetchTaskSubmission(currentTask.id, currentUser.id!) : Promise.resolve(null)
+        ]);
+        setCompletedTaskIds(userCompletedTasks);
+        setAnnotations(userAnnotations);
+        setImageAnnotations(userImageAnnotations);
+        if (userSubmission) {
+          setCulturalScore(userSubmission.cultural_score || 0);
+          setLanguageSimilarity(userSubmission.language_similarity || 'na');
+          setLanguageSimilarityJustification(userSubmission.language_similarity_justification || '');
         }
       }
 
@@ -724,6 +689,11 @@ const App: React.FC = () => {
     e.preventDefault();
     setError('');
 
+    if (!supabaseService.supabase) {
+      setError('Supabase is not configured. Cannot perform authentication.');
+      return;
+    }
+
     try {
       if (isRegistering) {
         if (formData.password !== formData.confirmPassword) {
@@ -731,59 +701,55 @@ const App: React.FC = () => {
           return;
         }
 
-        const { data, error } = await supabaseService.signUp(
+        const { error: signUpError } = await supabaseService.signUp(
           formData.email,
           formData.password,
           formData.name,
-          'annotator' // All signups are annotators
+          'annotator'
         );
 
-        if (error) {
-          if (error.message.includes('already registered')) {
+        if (signUpError) {
+          if (signUpError.message.includes('already registered')) {
             setError(t('auth_error_email_exists', language));
           } else {
-            setError(error.message);
+            setError(signUpError.message);
           }
           return;
         }
-
-        // Get the user profile
-        const user = await supabaseService.getCurrentUser();
-        if (user) {
-          setCurrentUser(user);
-          setIsAuthenticated(true);
-          setViewMode(user.role === 'admin' ? 'admin' : 'workspace');
-        }
-      } else {
-        const { data, error } = await supabaseService.signIn(
-          formData.email,
-          formData.password
-        );
-
-        if (error) {
-          setError(t('auth_error_invalid', language));
-          return;
-        }
-
-        // Get the user profile
-        const user = await supabaseService.getCurrentUser();
-        if (user) {
-          setCurrentUser(user);
-          setIsAuthenticated(true);
-          setViewMode(user.role === 'admin' ? 'admin' : 'workspace');
-        } else {
-          setError(t('auth_error_invalid', language));
-        }
+        // Supabase trigger automatically creates the user profile, then we fetch it.
       }
-    } catch (err) {
+
+      const { error: signInError } = await supabaseService.signIn(
+        formData.email,
+        formData.password
+      );
+
+      if (signInError) {
+        setError(t('auth_error_invalid', language));
+        return;
+      }
+
+      // Get the user profile after successful sign-in
+      const user = await supabaseService.getCurrentUser();
+      if (user) {
+        setCurrentUser(user);
+        setIsAuthenticated(true);
+        setViewMode(user.role === 'admin' ? 'admin' : 'workspace');
+      } else {
+        setError(t('auth_error_invalid', language));
+      }
+
+    } catch (err: any) {
       console.error('Auth error:', err);
-      setError('An unexpected error occurred');
+      setError('An unexpected error occurred: ' + err.message);
     }
   };
 
   const handleLogout = async () => {
     stopAudio();
-    await supabaseService.signOut();
+    if (supabaseService.supabase) {
+      await supabaseService.signOut();
+    }
     setIsAuthenticated(false);
     setCurrentUser(null);
     setAnnotations([]);
@@ -795,85 +761,47 @@ const App: React.FC = () => {
     setCurrentTaskIndex(0);
     setFormData({ name: '', email: '', password: '', confirmPassword: '', role: 'annotator' });
     setViewMode('workspace');
+    setGlobalLog([]);
+    setAllTaskSubmissions([]);
   };
 
-  // ADMIN OPERATIONS
-  const addUser = (newUser: User) => {
-    const updated = [...users, newUser];
-    setUsers(updated);
-    localStorage.setItem('annotate_users', JSON.stringify(updated));
-  };
-
-  const deleteUser = (email: string) => {
-    const updated = users.filter(u => u.email !== email);
-    setUsers(updated);
-    localStorage.setItem('annotate_users', JSON.stringify(updated));
-    localStorage.removeItem(`annotate_data_${email}`);
-  };
-
-  const updateRole = (email: string, role: UserRole) => {
-    const updated = users.map(u => u.email === email ? { ...u, role } : u);
-    setUsers(updated);
-    localStorage.setItem('annotate_users', JSON.stringify(updated));
-    if (email === currentUser?.email) {
-      setCurrentUser(prev => prev ? { ...prev, role } : null);
+  const updateAnnotationGlobally = useCallback(async (id: string, updates: Partial<Annotation>) => {
+    if (!supabaseService.supabase || !currentUser?.id) return;
+    try {
+      const { error } = await supabaseService.updateAnnotation(id, updates);
+      if (error) throw error;
+      setGlobalLog(prev => prev.map(a => a.id === id ? { ...a, ...updates, timestamp: Date.now() } : a));
+      setAnnotations(prev => prev.map(a => a.id === id ? { ...a, ...updates } : a)); // Update local task annotations too
+    } catch (error: any) {
+      console.error('Error updating global annotation:', error.message);
+      setError(error.message);
     }
-  };
+  }, [currentUser]);
 
-  const assignTask = (taskId: string, email: string) => {
-    const updated = assignments.filter(a => a.taskId !== taskId);
-    if (email !== 'all') {
-      updated.push({ taskId, assignedToEmail: email });
+  const deleteAnnotationGlobally = useCallback(async (id: string) => {
+    if (!supabaseService.supabase || !currentUser?.id) return;
+    try {
+      const { error } = await supabaseService.deleteAnnotation(id);
+      if (error) throw error;
+      setGlobalLog(prev => prev.filter(a => a.id !== id));
+      setAnnotations(prev => prev.filter(a => a.id !== id)); // Update local task annotations too
+    } catch (error: any) {
+      console.error('Error deleting global annotation:', error.message);
+      setError(error.message);
     }
-    setAssignments(updated);
-    localStorage.setItem('annotate_assignments', JSON.stringify(updated));
-  };
+  }, [currentUser]);
 
-  const updateAnnotationGlobally = (id: string, updates: Partial<Annotation>) => {
-    const key = 'annotate_global_log';
-    const updatedLog = globalLog.map(a => a.id === id ? { ...a, ...updates, timestamp: Date.now() } : a);
-    setGlobalLog(updatedLog);
-    localStorage.setItem(key, JSON.stringify(updatedLog));
-    if (annotations.some(a => a.id === id)) {
-      setAnnotations(prev => prev.map(a => a.id === id ? { ...a, ...updates } : a));
-    }
-  };
-
-  const deleteAnnotationGlobally = (id: string) => {
-    const key = 'annotate_global_log';
-    const updatedLog = globalLog.filter(a => a.id !== id);
-    setGlobalLog(updatedLog);
-    localStorage.setItem(key, JSON.stringify(updatedLog));
-    setAnnotations(prev => prev.filter(a => a.id !== id));
-  };
 
   // Audio Playback
   const stopAudio = () => {
     if (currentSourceRef.current) {
-      // Stop TTS source if any
       try { currentSourceRef.current.stop(); } catch (e) { }
       currentSourceRef.current = null;
     }
-    // Also stop HTML audio elements if we were tracking them, but for this simple implementation
-    // leveraging the native <audio> logic or just toggle state is enough.
-    // However, to "replace" the TTS button with a play button for the URL, we can just use the HTML Audio element's API or
-    // simply render the Audio element IN PLACE of the button.
-    // For now, let's reset state.
     setPlayingParaIdx(null);
   };
 
   const handlePlayParagraph = (idx: number) => {
-    // If the user wants to Play URL on click, we can programmatically play an audio element.
-    // But simpler is to TOGGLE the display of a native audio player, OR simply play it.
-    // Given "replace option", let's make the button toggle the audio for that section.
-    // Actually, standard <audio> tag is best for controls (seek, volume).
-    // The user asked to REPLACE the TTS option.
-    // So I will make the button toggle the visibility of the native player?
-    // OR, just replacing the button with the <audio> tag directly in the render loop is cleaner.
-    // But I will stick to the plan: Remove TTS logic here.
-    // I'll leave this empty or remove it.
-    // Wait, I need to remove the button from JSX too.
-    // So I'll remove this function entirely in the next step or just empty it now to be safe.
     setPlayingParaIdx(idx === playingParaIdx ? null : idx);
   };
 
@@ -903,11 +831,6 @@ const App: React.FC = () => {
   };
 
   const handleImageChooseType = (subtype: 'culture' | 'issue') => {
-    if (editingImageAnno) {
-      setEditingImageAnno(prev => prev ? { ...prev, subtype } : null);
-    } else if (pendingPin) {
-      setPendingPin(prev => prev ? { ...prev, subtype } : null);
-    }
     setIsTypeSelectorOpen(false);
     if (subtype === 'culture') {
       setIsImageModalOpen(true);
@@ -946,7 +869,7 @@ const App: React.FC = () => {
     }
   };
 
-  const saveTextAnnotation = (
+  const saveTextAnnotation = async (
     comment: string,
     isImportant: boolean,
     isRelevant: DecisionStatus,
@@ -955,9 +878,13 @@ const App: React.FC = () => {
     supportedJustification: string,
     cultureProxy: string
   ) => {
-    if (!currentTask) return;
+    if (!currentTask || !currentUser?.id) return;
+    setIsTextModalOpen(false); // Close modal early to avoid double renders
+
+    let updatedAnnos: Annotation[];
+
     if (editingTextAnnotation) {
-      setAnnotations(prev => prev.map(a => a.id === editingTextAnnotation.id ? {
+      updatedAnnos = annotations.map(a => a.id === editingTextAnnotation.id ? {
         ...a,
         comment,
         isImportant,
@@ -967,7 +894,7 @@ const App: React.FC = () => {
         supportedJustification,
         cultureProxy,
         timestamp: Date.now()
-      } : a));
+      } : a);
     } else if (currentSelection) {
       const newAnnotation: Annotation = {
         id: Math.random().toString(36).substr(2, 9),
@@ -982,25 +909,40 @@ const App: React.FC = () => {
         type: 'manual',
         timestamp: Date.now(),
         userEmail: currentUser?.email,
+        userId: currentUser.id,
         taskId: currentTask.id,
         subtype: 'culture'
       };
-      setAnnotations(prev => [...prev, newAnnotation]);
+      updatedAnnos = [...annotations, newAnnotation];
+    } else {
+      return; // Should not happen
     }
-    setIsTextModalOpen(false);
+
+    setAnnotations(updatedAnnos);
     setCurrentSelection(null);
     setEditingTextAnnotation(null);
+
+    // Manual trigger save for immediate persistence rather than waiting for debounce
+    if (currentUser && currentTask) {
+      await supabaseService.saveAnnotations(currentTask.id, currentUser.id, updatedAnnos);
+      const updatedGlobalLog = await supabaseService.fetchAllAnnotations();
+      setGlobalLog(updatedGlobalLog);
+    }
   };
 
-  const saveIssueAnnotation = (category: string, description: string) => {
-    if (!currentTask) return;
+  const saveIssueAnnotation = async (category: string, description: string) => {
+    if (!currentTask || !currentUser?.id) return;
+    setIsIssueModalOpen(false);
+
+    let updatedAnnos: Annotation[];
+
     if (editingTextAnnotation) {
-      setAnnotations(prev => prev.map(a => a.id === editingTextAnnotation.id ? {
+      updatedAnnos = annotations.map(a => a.id === editingTextAnnotation.id ? {
         ...a,
         issueCategory: category,
         issueDescription: description,
         timestamp: Date.now()
-      } : a));
+      } : a);
     } else if (currentSelection) {
       const newAnnotation: Annotation = {
         id: Math.random().toString(36).substr(2, 9),
@@ -1013,13 +955,24 @@ const App: React.FC = () => {
         issueDescription: description,
         timestamp: Date.now(),
         userEmail: currentUser?.email,
+        userId: currentUser.id,
         taskId: currentTask.id
       };
-      setAnnotations(prev => [...prev, newAnnotation]);
+      updatedAnnos = [...annotations, newAnnotation];
+    } else {
+      return;
     }
-    setIsIssueModalOpen(false);
+
+    setAnnotations(updatedAnnos);
     setCurrentSelection(null);
     setEditingTextAnnotation(null);
+
+    // Manual trigger save for immediate persistence
+    if (currentUser && currentTask) {
+      await supabaseService.saveAnnotations(currentTask.id, currentUser.id, updatedAnnos);
+      const updatedGlobalLog = await supabaseService.fetchAllAnnotations();
+      setGlobalLog(updatedGlobalLog);
+    }
   };
 
   const handleAddPin = (paraIdx: number, x: number, y: number, width: number, height: number, shapeType: ShapeType) => {
@@ -1040,11 +993,16 @@ const App: React.FC = () => {
     }
   };
 
-  const saveImageAnnotation = (data: Omit<ImageAnnotation, 'id' | 'x' | 'y' | 'width' | 'height' | 'timestamp'>) => {
-    if (activeImageIdx === null || !currentTask) return;
+  const saveImageAnnotation = async (data: Omit<ImageAnnotation, 'id' | 'x' | 'y' | 'width' | 'height' | 'timestamp' | 'userId' | 'taskId' | 'userEmail' | 'paragraph_index'>) => {
+    if (activeImageIdx === null || !currentTask || !currentUser?.id) return;
     const paraIdxKey = activeImageIdx.toString();
+    setIsImageModalOpen(false);
+    setIsImageIssueModalOpen(false);
+
+    let updatedImageAnnos: ImageAnnotation[];
+
     if (editingImageAnno) {
-      setImageAnnotations(prev => ({ ...prev, [paraIdxKey]: (prev[paraIdxKey] || []).map(a => a.id === editingImageAnno.id ? { ...a, ...data } : a) }));
+      updatedImageAnnos = (imageAnnotations[paraIdxKey] || []).map(a => a.id === editingImageAnno.id ? { ...a, ...data } : a);
     } else if (pendingPin) {
       const newAnno: ImageAnnotation = {
         id: Math.random().toString(36).substr(2, 9),
@@ -1052,20 +1010,47 @@ const App: React.FC = () => {
         y: pendingPin.y,
         width: pendingPin.width,
         height: pendingPin.height,
+        shapeType: pendingPin.shapeType,
         timestamp: Date.now(),
         userEmail: currentUser?.email,
+        userId: currentUser.id,
         taskId: currentTask.id,
-        ...data
+        paragraph_index: activeImageIdx,
+        // Provide default values for properties that might be omitted when creating an issue annotation
+        description: data.description || '',
+        comment: data.comment || '',
+        isPresent: data.isPresent || 'na',
+        presentJustification: data.presentJustification || '',
+        isRelevant: data.isRelevant || 'na',
+        relevantJustification: data.relevantJustification || '',
+        isSupported: data.isSupported || 'na',
+        supportedJustification: data.supportedJustification || '',
+        cultureProxy: data.cultureProxy || '',
+        subtype: data.subtype,
+        issueCategory: data.issueCategory,
+        issueDescription: data.issueDescription,
       };
-      setImageAnnotations(prev => ({ ...prev, [paraIdxKey]: [...(prev[paraIdxKey] || []), newAnno] }));
+      updatedImageAnnos = [...(imageAnnotations[paraIdxKey] || []), newAnno];
+    } else {
+      return;
     }
-    setIsImageModalOpen(false);
-    setIsImageIssueModalOpen(false);
+
+    const newImageAnnotationsState = { ...imageAnnotations, [paraIdxKey]: updatedImageAnnos };
+    setImageAnnotations(newImageAnnotationsState);
     setEditingImageAnno(null);
     setPendingPin(null);
+
+    // Manual trigger save for immediate persistence
+    if (currentUser && currentTask) {
+      await supabaseService.saveImageAnnotations(currentTask.id, currentUser.id, newImageAnnotationsState);
+      const updatedGlobalLog = await supabaseService.fetchAllAnnotations();
+      setGlobalLog(updatedGlobalLog);
+    }
   };
 
-  const handleCommitTask = () => {
+  const handleCommitTask = async () => {
+    if (!currentTask || !currentUser?.id) return;
+
     const hasTextAnnotations = annotations.length > 0;
     const hasImageAnnotations = Object.values(imageAnnotations).some((list: any) => list.length > 0);
 
@@ -1075,42 +1060,106 @@ const App: React.FC = () => {
       }
     }
 
-    if (!isTaskSubmitted) {
-      setCompletedTaskIds(prev => [...prev, currentTask.id]);
+    try {
+      await supabaseService.saveTaskSubmission(
+        currentTask.id,
+        currentUser.id,
+        culturalScore,
+        languageSimilarity,
+        languageSimilarityJustification,
+        true // Mark as completed
+      );
+      // Re-fetch completed task IDs for the current user
+      const updatedCompletedTaskIds = await supabaseService.fetchCompletedTaskIds(currentUser.id);
+      setCompletedTaskIds(updatedCompletedTaskIds);
+
+      // Re-fetch all submissions to update AdminDashboard agreement metrics
+      const updatedAllSubmissions = await supabaseService.fetchAllUserTaskSubmissions();
+      setAllTaskSubmissions(updatedAllSubmissions);
+
+      setShowResubmitSuccess(true);
+      setTimeout(() => {
+        setShowResubmitSuccess(false);
+        if (currentTaskIndex < visibleTasks.length - 1) {
+          nextTask();
+        } else {
+          setIsReviewingCompleted(true); // If all tasks are completed, show completion message
+        }
+      }, 1200);
+    } catch (error) {
+      console.error('Error committing task:', error);
+      setError('Failed to commit task. Please try again.');
     }
-    setShowResubmitSuccess(true);
-    setTimeout(() => {
-      setShowResubmitSuccess(false);
-      if (currentTaskIndex < visibleTasks.length - 1) {
-        nextTask();
-      }
-    }, 1200);
   };
 
-  const handleDeleteSubmission = () => {
-    setCompletedTaskIds(prev => prev.filter(id => id !== currentTask.id));
+  const handleDeleteSubmission = async () => {
+    if (!currentTask || !currentUser?.id) return;
+    if (!window.confirm("Are you sure you want to delete this task's submission? This will clear all your annotations for this task.")) {
+      return;
+    }
+
+    try {
+      await supabaseService.deleteTaskSubmission(currentTask.id, currentUser.id);
+      // Clear local state for this task
+      setAnnotations([]);
+      setImageAnnotations({});
+      setCulturalScore(0);
+      setLanguageSimilarity('na');
+      setLanguageSimilarityJustification('');
+      // Update completed tasks list
+      setCompletedTaskIds(prev => prev.filter(id => id !== currentTask.id));
+      // Re-fetch all annotations and submissions to update AdminDashboard
+      const [updatedGlobalLog, updatedAllSubmissions] = await Promise.all([
+        supabaseService.fetchAllAnnotations(),
+        supabaseService.fetchAllUserTaskSubmissions()
+      ]);
+      setGlobalLog(updatedGlobalLog);
+      setAllTaskSubmissions(updatedAllSubmissions);
+    } catch (error) {
+      console.error('Error deleting submission:', error);
+      setError('Failed to delete submission. Please try again.');
+    }
   };
+
 
   const getAiSuggestions = async () => {
+    if (!currentTask) return;
     setIsAiLoading(true);
-    const suggestions = await getSmartSuggestions(currentTask.text);
-    const newAnnos: Annotation[] = (suggestions || []).map((s: any) => ({
-      id: Math.random().toString(36).substr(2, 9),
-      start: s.start,
-      end: s.end,
-      text: s.text,
-      comment: `AI Suggestion: ${s.label}`,
-      isImportant: false,
-      type: 'ai',
-      timestamp: Date.now(),
-      userEmail: 'system',
-      taskId: currentTask.id
-    }));
-    setAnnotations(prev => {
-      const filtered = newAnnos.filter(na => !prev.some(pa => (na.start < pa.end && na.end > pa.start)));
-      return [...prev, ...filtered];
-    });
-    setIsAiLoading(false);
+    try {
+      const suggestions = await getSmartSuggestions(currentTask.text);
+      if (!currentUser?.id) {
+        throw new Error("User ID not available for AI suggestions.");
+      }
+      const newAnnos: Annotation[] = (suggestions || []).map((s: any) => ({
+        id: Math.random().toString(36).substr(2, 9),
+        start: s.start,
+        end: s.end,
+        text: s.text,
+        comment: `AI Suggestion: ${s.label}`,
+        isImportant: false,
+        type: 'ai',
+        timestamp: Date.now(),
+        userEmail: 'system', // AI annotations are system-generated
+        userId: currentUser.id, // Associate with current user for saving
+        taskId: currentTask.id,
+        subtype: 'culture' // Default AI suggestions to culture type
+      }));
+
+      setAnnotations(prev => {
+        const filtered = newAnnos.filter(na => !prev.some(pa => (na.start < pa.end && na.end > pa.start)));
+        const updated = [...prev, ...filtered];
+        // Trigger save after AI suggestions
+        if (currentUser && currentTask) {
+          supabaseService.saveAnnotations(currentTask.id, currentUser.id, updated);
+        }
+        return updated;
+      });
+    } catch (error) {
+      console.error("Error fetching AI suggestions:", error);
+      setError("Failed to get AI suggestions.");
+    } finally {
+      setIsAiLoading(false);
+    }
   };
 
   if (!isAuthenticated) {
@@ -1301,7 +1350,7 @@ const App: React.FC = () => {
                     </h2>
                     <div className="space-y-2">
                       {flatImageAnnotations.map(anno => (
-                        <div key={anno.id} className={`p-3.5 rounded-2xl border bg-white border-slate-100 text-[11px] hover:bg-slate-50 cursor-pointer group transition-all shadow-sm hover:shadow-md ${anno.subtype === 'issue' ? 'border-l-4 border-l-red-500' : 'border-l-4 border-l-indigo-500'}`} onClick={() => handleEditPin(anno.paraIdx, anno)}>
+                        <div key={anno.id} className={`p-3.5 rounded-2xl border bg-white border-slate-100 text-[11px] hover:bg-slate-50 cursor-pointer group transition-all shadow-sm hover:shadow-md ${anno.subtype === 'issue' ? 'border-l-4 border-l-red-500' : 'border-l-4 border-l-indigo-500'}`} onClick={() => handleEditPin(anno.paragraph_index!, anno)}>
                           <div className="flex justify-between items-center mb-1">
                             <span className="font-bold text-slate-800 capitalize truncate mr-2">
                               {anno.subtype === 'issue' ? t(anno.issueCategory as any, language) : anno.description || `${anno.shapeType} #${anno.id.slice(0, 4)}`}
@@ -1312,7 +1361,7 @@ const App: React.FC = () => {
                             <button onClick={(e) => {
                               e.stopPropagation();
                               setImageAnnotations(prev => {
-                                const paraKey = anno.paraIdx.toString();
+                                const paraKey = anno.paragraph_index!.toString();
                                 return {
                                   ...prev,
                                   [paraKey]: (prev[paraKey] || []).filter(a => a.id !== anno.id)
@@ -1356,7 +1405,7 @@ const App: React.FC = () => {
             {!isSidebarCollapsed && t('workspace_nav', language)}
           </button>
 
-          {currentUser.role === 'admin' && (
+          {currentUser?.role === 'admin' && (
             <button
               onClick={() => setViewMode('admin')}
               className={`w-full py-4 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center active:scale-95 ${viewMode === 'admin' ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-200' : 'bg-white text-slate-400 hover:bg-slate-50 border border-slate-100'}`}
@@ -1490,7 +1539,9 @@ const App: React.FC = () => {
                 allAnnotations={globalLog}
                 assignments={assignments}
                 projectAssignments={projectAssignments}
-                tasks={visibleTasks.length > 0 ? tasks : []}
+                tasks={tasks}
+                projects={projects}
+                allTaskSubmissions={allTaskSubmissions} // Pass all submissions for agreement calculation
                 onAddUser={addUser}
                 onDeleteUser={deleteUser}
                 onUpdateRole={updateRole}
@@ -1499,19 +1550,18 @@ const App: React.FC = () => {
                 onRemoveProjectAssignment={removeProjectAssignment}
                 onUpdateAnnotation={updateAnnotationGlobally}
                 onDeleteAnnotation={deleteAnnotationGlobally}
-                projects={projects}
                 onAddProject={addProject}
                 onUpdateProject={updateProject}
                 onDeleteProject={deleteProject}
                 onAddTask={addTask}
                 onUpdateTask={updateTask}
                 onDeleteTask={deleteTask}
-                onExportProject={handleExportProject}
-                onImportProject={handleImportProject}
                 onInspectProject={(projectId) => {
                   setAdminProjectFilter(projectId);
                   setViewMode('workspace');
                 }}
+                onExportProject={handleExportProject}
+                onImportProject={handleImportProject}
                 onClose={() => setViewMode('workspace')}
                 language={language}
               />
@@ -1547,15 +1597,17 @@ const App: React.FC = () => {
                             <span className="text-[11px] font-black uppercase text-indigo-600 tracking-[0.3em] bg-indigo-50 px-4 py-1.5 rounded-2xl border border-indigo-100">{t('paragraph_label', language)} #{idx + 1}</span>
 
                             {/* Audio Player Replacement */}
-                            {currentTask.audio && currentTask.audio.length > 0 && (
+                            {currentTask?.audio && currentTask.audio.length > idx && (
                               <div className="flex items-center bg-white rounded-full border border-slate-100 shadow-sm px-2 py-1">
                                 <audio
                                   controls
-                                  src={currentTask.audio[idx % currentTask.audio.length]}
+                                  src={currentTask.audio[idx]}
                                   className="h-8 w-60"
                                   onPlay={() => {
                                     setPlayingParaIdx(idx);
                                   }}
+                                  onPause={() => setPlayingParaIdx(null)}
+                                  onEnded={() => setPlayingParaIdx(null)}
                                 />
                               </div>
                             )}
@@ -1572,6 +1624,23 @@ const App: React.FC = () => {
                             }}
                             onEditAnnotation={a => handleEditHighlight({ ...a, start: a.start + para.offset, end: a.end + para.offset })}
                           />
+                           <div className="flex justify-end mt-4">
+                            <button
+                              onClick={getAiSuggestions}
+                              disabled={isAiLoading}
+                              className="px-6 py-2.5 bg-blue-500 text-white rounded-xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-blue-600 transition-all shadow-lg active:scale-95 flex items-center disabled:opacity-50"
+                            >
+                              {isAiLoading ? (
+                                <>
+                                  <i className="fa-solid fa-spinner fa-spin mr-2"></i> {t('ai_predict', language)}...
+                                </>
+                              ) : (
+                                <>
+                                  <i className="fa-solid fa-wand-magic-sparkles mr-2"></i> {t('ai_predict', language)}
+                                </>
+                              )}
+                            </button>
+                          </div>
                         </div>
 
                         <div className="lg:sticky lg:top-10">
@@ -1825,7 +1894,21 @@ const App: React.FC = () => {
       <ImageIssueModal
         isOpen={isImageIssueModalOpen}
         onClose={() => setIsImageIssueModalOpen(false)}
-        onSave={(data) => saveImageAnnotation({ ...data, subtype: 'issue' })}
+        onSave={(data) => saveImageAnnotation({
+          ...data,
+          subtype: 'issue',
+          // Provide default values for other required properties of ImageAnnotation
+          description: '',
+          comment: '',
+          isPresent: 'na',
+          presentJustification: '',
+          isRelevant: 'na',
+          relevantJustification: '',
+          isSupported: 'na',
+          supportedJustification: '',
+          shapeType: editingImageAnno?.shapeType || pendingPin?.shapeType || 'rect', // Fallback to existing or pending shape
+          cultureProxy: '',
+        })}
         existingAnnotation={editingImageAnno}
         language={language}
       />

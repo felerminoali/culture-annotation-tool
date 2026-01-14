@@ -1,8 +1,10 @@
 
+
 export type UserRole = 'admin' | 'annotator';
 export type Language = 'en' | 'pt';
 
 export interface User {
+  id?: string; // Add ID for Supabase
   name: string;
   email: string;
   role: UserRole;
@@ -24,6 +26,7 @@ export interface Annotation {
   issueDescription?: string;
   timestamp: number;
   userEmail?: string; // Track who made it
+  userId?: string; // Supabase user ID
   taskId?: string;
   isRelevant?: DecisionStatus;
   relevantJustification?: string;
@@ -52,19 +55,21 @@ export interface ImageAnnotation {
   shapeType: ShapeType;
   description: string;
   comment: string;
-  isPresent: DecisionStatus;
-  presentJustification?: string;
+  isPresent: DecisionStatus; // Retain if needed for other image annotation types, removed from modal but still in type
+  presentJustification?: string; // Retain if needed
   isRelevant: DecisionStatus;
   relevantJustification?: string;
+  isSupported?: DecisionStatus;
+  supportedJustification?: string;
   subtype?: AnnotationSubtype;
   issueCategory?: string;
   issueDescription?: string;
   cultureProxy?: string;
-  isSupported?: DecisionStatus;
-  supportedJustification?: string;
   timestamp: number;
   userEmail?: string;
+  userId?: string; // Supabase user ID
   taskId?: string;
+  paragraph_index?: number; // Add paragraph_index to ImageAnnotation
 }
 
 export interface SelectionState {
@@ -74,8 +79,10 @@ export interface SelectionState {
 }
 
 export interface TaskAssignment {
+  id?: string; // Supabase ID
   taskId: string;
   assignedToEmail: string; // "all" or specific email
+  userId?: string; // Supabase user ID
 }
 
 export interface Project {
@@ -93,15 +100,28 @@ export interface Task {
   description: string;
   text: string;
   images: string[];
-  audio?: string[];
+  audio?: string[]; // New: Audio URLs
   projectId?: string;
-  question?: string;
-  category?: 'diet' | 'exercise';
-  gender?: 'male' | 'female' | 'other';
-  taskType?: 'independent' | 'overlapped';
+  question?: string; // New: Task-specific question
+  category?: 'diet' | 'exercise'; // New: Task category
+  gender?: 'male' | 'female' | 'other'; // New: Persona gender
+  taskType?: 'independent' | 'overlapped'; // New: Task type for agreement calculation
 }
 
 export interface ProjectAssignment {
+  id?: string; // Supabase ID
   projectId: string;
   assignedToEmail: string;
+  userId?: string; // Supabase user ID
+}
+
+// Interface for fetching submission data for agreement calculation
+export interface UserTaskSubmission {
+  taskId: string;
+  userEmail: string;
+  userId: string;
+  culturalScore: number;
+  languageSimilarity?: DecisionStatus; // Added for Admin Dashboard
+  languageSimilarityJustification?: string; // Added for Admin Dashboard
+  completed: boolean; // Indicates if a submission exists for this task/user
 }
