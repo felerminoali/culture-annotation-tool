@@ -1,8 +1,9 @@
 
+
 import React, { useState, useEffect } from 'react';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
-import { User, Annotation, TaskAssignment, Task, UserRole, Project, ProjectAssignment, DecisionStatus, Language } from '../types';
+import { User, Annotation, TaskAssignment, Task, UserRole, Project, ProjectAssignment, DecisionStatus, Language, UserTaskSubmission } from '../types';
 import { t } from '../services/i18n';
 
 
@@ -14,6 +15,7 @@ interface AdminDashboardProps {
   projectAssignments: ProjectAssignment[];
   tasks: Task[];
   projects: Project[];
+  allTaskSubmissions: UserTaskSubmission[]; // Prop to pass all user task submissions
   onAddUser: (user: User) => void;
   onDeleteUser: (email: string) => void;
   onUpdateRole: (email: string, role: UserRole) => void;
@@ -22,10 +24,10 @@ interface AdminDashboardProps {
   onRemoveProjectAssignment: (projectId: string, email: string) => void;
   onUpdateAnnotation: (id: string, updates: Partial<Annotation>) => void;
   onDeleteAnnotation: (id: string) => void;
-  onAddProject: (project: Project) => void;
+  onAddProject: (project: Omit<Project, 'id' | 'createdAt'>) => void;
   onUpdateProject: (id: string, updates: Partial<Project>) => void;
   onDeleteProject: (id: string) => void;
-  onAddTask: (task: Task) => void;
+  onAddTask: (task: Omit<Task, 'id'>) => void;
   onUpdateTask: (id: string, updates: Partial<Task>) => void;
   onDeleteTask: (id: string) => void;
   onInspectProject: (projectId: string) => void;
@@ -43,6 +45,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   projectAssignments,
   tasks,
   projects,
+  allTaskSubmissions, // Destructure new prop
   onAddUser,
   onDeleteUser,
   onUpdateRole,
@@ -179,16 +182,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     return users.filter(user => {
       if (user.role !== 'annotator' && user.role !== 'admin') return false;
-      const key = `annotate_data_${user.email}`;
-      const userDataStr = localStorage.getItem(key);
-      if (!userDataStr) return false;
-      try {
-        const userData = JSON.parse(userDataStr);
-        const completedCount = overlappedTasks.filter(t => userData.completedTaskIds?.includes(t.id)).length;
-        return completedCount === overlappedTasks.length;
-      } catch {
-        return false;
-      }
+      // Check if user has completed all overlapped tasks for this project
+      const userCompletedOverlappedTasks = allTaskSubmissions.filter(
+        submission => submission.userId === user.id &&
+          overlappedTasks.some(ot => ot.id === submission.taskId) &&
+          submission.completed
+      );
+      return userCompletedOverlappedTasks.length === overlappedTasks.length;
     });
   };
 
@@ -201,23 +201,26 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     const taskAgreements = overlappedTasks.map(task => {
       const scores: number[] = [];
-      const taskWeights: number[] = [];
 
+      // Collect scores for the selected users for this specific task
       selectedUsers.forEach(email => {
-        const key = `annotate_data_${email}`;
-        const userDataStr = localStorage.getItem(key);
-        if (userDataStr) {
-          try {
-            const userData = JSON.parse(userDataStr);
-            if (userData[task.id] && userData[task.id].culturalScore !== undefined) {
-              scores.push(userData[task.id].culturalScore);
-            }
-          } catch { }
+        const user = users.find(u => u.email === email);
+        if (user) {
+          const submission = allTaskSubmissions.find(
+            s => s.taskId === task.id && s.userId === user.id && s.completed
+          );
+          if (submission && submission.culturalScore !== undefined) {
+            scores.push(submission.culturalScore);
+          }
         }
       });
 
-      if (scores.length >= selectedUsers.length) {
+      // Ensure we have scores for all selected users for this task to include it in agreement calculations
+      if (scores.length === selectedUsers.length) {
         matrix.push(scores);
+      } else {
+        // If not all selected users have completed this overlapped task, skip it for agreement
+        return { taskId: task.id, taskTitle: task.title, mean: 0, stdDev: 0, agreement: 0, skipped: true };
       }
 
       if (scores.length < 2) return { taskId: task.id, taskTitle: task.title, mean: 0, stdDev: 0, agreement: 0 };
@@ -230,7 +233,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const agreement = Math.max(0, 1 - (avgDiff / 50));
 
       return { taskId: task.id, taskTitle: task.title, mean, stdDev, agreement };
-    });
+    }).filter(ta => !(ta as any).skipped); // Filter out tasks that didn't have all selected users' scores
 
     const overallAgreement = taskAgreements.length > 0
       ? taskAgreements.reduce((a, b) => a + b.agreement, 0) / taskAgreements.length
@@ -249,13 +252,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         for (let j = i + 1; j < selectedUsers.length; j++) {
           const rater1Scores = matrix.map(row => row[i]);
           const rater2Scores = matrix.map(row => row[j]);
-          pSum += calculatePearson(rater1Scores, rater2Scores);
-          sSum += calculateSpearman(rater1Scores, rater2Scores);
-          count++;
+          // Only calculate if both raters have scores for at least 2 common tasks
+          if (rater1Scores.filter(s => s !== undefined).length >= 2 && rater2Scores.filter(s => s !== undefined).length >= 2) {
+            pSum += calculatePearson(rater1Scores, rater2Scores);
+            sSum += calculateSpearman(rater1Scores, rater2Scores);
+            count++;
+          }
         }
       }
-      avgPearson = pSum / count;
-      avgSpearman = sSum / count;
+      avgPearson = count === 0 ? 0 : pSum / count;
+      avgSpearman = count === 0 ? 0 : sSum / count;
     }
 
     setAgreementResult({
@@ -267,7 +273,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     });
   };
   const [taskForm, setTaskForm] = useState<{
-    id: string;
+    id: string; // Keep ID in form for editing to preserve it, though addTask won't use it
     title: string;
     objective: string;
     description: string;
@@ -331,9 +337,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       onUpdateProject(editingProject.id, projectForm);
     } else {
       onAddProject({
-        id: Math.random().toString(36).substr(2, 9),
         ...projectForm,
-        createdAt: Date.now()
       });
     }
     setIsProjectModalOpen(false);
@@ -365,14 +369,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const saveTask = () => {
-    const finalId = taskForm.id.trim() || `task-${Math.random().toString(36).substr(2, 6)}`;
-    const finalTitle = taskForm.title || finalId;
-    const finalObjective = taskForm.objective || taskForm.description.substring(0, 50);
-
     const compiledText = taskForm.paragraphs.join('\n\n');
     const taskData = {
-      title: finalTitle,
-      objective: finalObjective,
+      title: taskForm.title,
+      objective: taskForm.objective,
       description: taskForm.description,
       projectId: taskForm.projectId,
       text: compiledText,
@@ -385,12 +385,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     };
 
     if (editingTask) {
-      onUpdateTask(editingTask.id, { ...taskData, id: finalId });
+      onUpdateTask(editingTask.id, taskData);
     } else {
-      onAddTask({
-        id: finalId,
-        ...taskData
-      });
+      // For new tasks, the ID is generated by Supabase or a random one from App.tsx.
+      // We pass without ID and let the service handle it.
+      onAddTask(taskData);
     }
     setIsTaskModalOpen(false);
   };
@@ -606,7 +605,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     {t('import_project', language)}
                   </button>
                 </div>
-                <button onClick={() => setIsProjectModalOpen(true)} className="px-6 py-3 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg hover:shadow-indigo-200 flex items-center">
+                <button onClick={() => openProjectModal()} className="px-6 py-3 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg hover:shadow-indigo-200 flex items-center">
                   <i className="fa-solid fa-plus mr-2"></i>
                   {t('new_project', language)}
                 </button>
@@ -631,7 +630,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             onChange={(e) => {
                               if (e.target.value) {
                                 onAssignProject(project.id, e.target.value);
-                                e.target.value = ''; // reset 
+                                e.target.value = ''; // reset
                               }
                             }}
                             className="text-xs bg-white border border-slate-200 rounded-lg px-2 py-1 font-bold outline-none hover:border-indigo-400 transition-colors"
@@ -648,17 +647,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             const projectTasks = tasks.filter(t => t.projectId === project.id);
                             const totalTasks = projectTasks.length;
                             const completionPercentage = (() => {
-                              if (totalTasks === 0) return 0;
-                              const key = `annotate_data_${member.email}`;
-                              const userDataStr = localStorage.getItem(key);
-                              if (!userDataStr) return 0;
-                              try {
-                                const userData = JSON.parse(userDataStr);
-                                const completedCount = projectTasks.filter(t => userData.completedTaskIds?.includes(t.id)).length;
-                                return Math.round((completedCount / totalTasks) * 100);
-                              } catch {
-                                return 0;
-                              }
+                              if (totalTasks === 0 || !member.id) return 0;
+                              const completedCount = allTaskSubmissions.filter(
+                                s => s.userId === member.id &&
+                                  projectTasks.some(pt => pt.id === s.taskId) &&
+                                  s.completed
+                              ).length;
+                              return Math.round((completedCount / totalTasks) * 100);
                             })();
 
                             return (
@@ -738,7 +733,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     value={bulkProjectTarget}
                     onChange={(e) => setBulkProjectTarget(e.target.value)}
                   >
-                    <option value="">{t('inspect_project', language)}...</option>
+                    <option value="">{t('assign_to_project', language)}...</option>
                     {projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
                   </select>
                   <button onClick={handleBulkAssign} disabled={!bulkProjectTarget} className="px-6 py-2 bg-white text-indigo-600 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-indigo-50 transition-all disabled:opacity-50">
@@ -1240,6 +1235,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     value={taskForm.id}
                     onChange={e => setTaskForm({ ...taskForm, id: e.target.value })}
                     placeholder="e.g. TASK-001"
+                    disabled={!!editingTask} // Disable editing ID for existing tasks
                   />
                 </div>
                 <div>

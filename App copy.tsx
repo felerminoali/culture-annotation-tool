@@ -13,6 +13,7 @@ import AdminDashboard from './components/AdminDashboard';
 import { getSmartSuggestions } from './services/geminiService'; // Removed getTextToSpeech as per requirement to replace it with native audio
 import { t, TranslationKey } from './services/i18n';
 import * as supabaseService from './services/supabaseService';
+import { v4 as uuidv4 } from 'uuid'; // Import uuidv4 for generating unique IDs
 
 
 
@@ -591,7 +592,6 @@ const App: React.FC = () => {
 
       if (!data.project || !data.tasks || !data.annotations) {
         alert("Invalid project file format");
-        console.error("Import failed: Invalid project file format", data);
         return;
       }
 
@@ -630,32 +630,28 @@ const App: React.FC = () => {
       // 3. Create or Update Annotations (Ground Truth) and Submissions
       for (const userImport of data.annotations) {
         const { userEmail, userId, completedTaskIds, taskData } = userImport;
-        if (!userEmail || !userId) {
-          console.warn(`Skipping user import due to missing email or ID:`, userImport);
-          continue;
-        }
+        if (!userEmail || !userId) continue;
 
         for (const taskId of completedTaskIds) {
           // Ensure a submission exists and mark it as completed (score 0, na for simplicity on import if not specified)
-          await supabaseService.saveTaskSubmission(taskId, userId, 0, 'na', '', true); // Explicitly mark as completed
+          await supabaseService.saveTaskSubmission(taskId, userId, 0, 'na', '');
         }
 
         for (const [taskId, tData] of Object.entries(taskData)) {
+          const submissionId = await supabaseService.getOrCreateSubmissionId(taskId, userId);
+          if (!submissionId) {
+            console.warn(`Could not get/create submission for task ${taskId} user ${userId}`);
+            continue;
+          }
+
           // Update submission details
           await supabaseService.saveTaskSubmission(
             taskId,
             userId,
             (tData as any).culturalScore || 0,
             (tData as any).languageSimilarity || 'na',
-            (tData as any).languageSimilarityJustification || '',
-            true // Assume tasks with data are completed
+            (tData as any).languageSimilarityJustification || ''
           );
-
-          const submissionId = await supabaseService.getOrCreateSubmissionId(taskId, userId);
-          if (!submissionId) {
-            console.warn(`Could not get/create submission for task ${taskId} user ${userId}. Skipping annotations for this user/task.`);
-            continue;
-          }
 
           // Save text annotations
           const incomingAnnos = (tData as any).annotations || [];
@@ -683,10 +679,8 @@ const App: React.FC = () => {
       if (currentUser) {
         const [userCompletedTasks, userAnnotations, userImageAnnotations, userSubmission] = await Promise.all([
           supabaseService.fetchCompletedTaskIds(currentUser.id!),
-          // Only call fetchAnnotations if currentTask and currentTask.id are present
-          currentTask?.id ? supabaseService.fetchAnnotations(currentTask.id, currentUser.id!) : Promise.resolve([]),
-          // Only call fetchImageAnnotations if currentTask and currentTask.id are present
-          currentTask?.id ? supabaseService.fetchImageAnnotations(currentTask.id, currentUser.id!) : Promise.resolve({}),
+          supabaseService.fetchAnnotations(currentTask?.id || '', currentUser.id!),
+          supabaseService.fetchImageAnnotations(currentTask?.id || '', currentUser.id!),
           currentTask ? supabaseService.fetchTaskSubmission(currentTask.id, currentUser.id!) : Promise.resolve(null)
         ]);
         setCompletedTaskIds(userCompletedTasks);
@@ -701,9 +695,9 @@ const App: React.FC = () => {
 
       alert("Project, Tasks, and Annotations imported successfully!");
 
-    } catch (e: any) { // Catch as any to access 'message' property
-      console.error("Import failed:", e);
-      alert(`Failed to import project. Details: ${e.message || e.toString()}`);
+    } catch (e) {
+      console.error("Import failed", e);
+      alert("Failed to import project. Check console for details.");
     }
   };
 
@@ -928,7 +922,7 @@ const App: React.FC = () => {
       } : a);
     } else if (currentSelection) {
       const newAnnotation: Annotation = {
-        id: Math.random().toString(36).substr(2, 9),
+        id: uuidv4(), // Use uuidv4 to generate a proper UUID
         ...currentSelection,
         comment,
         isImportant,
@@ -976,7 +970,7 @@ const App: React.FC = () => {
       } : a);
     } else if (currentSelection) {
       const newAnnotation: Annotation = {
-        id: Math.random().toString(36).substr(2, 9),
+        id: uuidv4(), // Use uuidv4 to generate a proper UUID
         ...currentSelection,
         comment: '',
         isImportant: false,
@@ -1036,7 +1030,7 @@ const App: React.FC = () => {
       updatedImageAnnos = (imageAnnotations[paraIdxKey] || []).map(a => a.id === editingImageAnno.id ? { ...a, ...data } : a);
     } else if (pendingPin) {
       const newAnno: ImageAnnotation = {
-        id: Math.random().toString(36).substr(2, 9),
+        id: uuidv4(), // Use uuidv4 to generate a proper UUID for image annotations
         x: pendingPin.x,
         y: pendingPin.y,
         width: pendingPin.width,
@@ -1162,7 +1156,7 @@ const App: React.FC = () => {
         throw new Error("User ID not available for AI suggestions.");
       }
       const newAnnos: Annotation[] = (suggestions || []).map((s: any) => ({
-        id: Math.random().toString(36).substr(2, 9),
+        id: uuidv4(), // Use uuidv4 for AI-generated suggestions too
         start: s.start,
         end: s.end,
         text: s.text,
