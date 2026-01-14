@@ -29,7 +29,7 @@ export const signUp = async (email: string, password: string, name: string, role
                 name,
                 role // This `role` goes into auth.users.user_metadata.role
             },
-            emailRedirectTo: undefined // Disable email confirmation
+            emailRedirectTo: null // Explicitly set to null to indicate no email confirmation redirect
         }
     });
 
