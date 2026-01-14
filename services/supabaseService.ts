@@ -2,8 +2,9 @@
 import { createClient, SupabaseClient, User as SupabaseUser } from '@supabase/supabase-js';
 import { User, Project, Task, Annotation, ImageAnnotation, TaskAssignment, ProjectAssignment, DecisionStatus, UserTaskSubmission } from '../types';
 
-const supabaseUrl = import.meta.env?.VITE_SUPABASE_URL as string | undefined;
-const supabaseAnonKey = import.meta.env?.VITE_SUPABASE_ANON_KEY as string | undefined;
+// Access environment variables using process.env, which is defined by Vite's `define` config
+const supabaseUrl = process.env.VITE_SUPABASE_URL as string | undefined;
+const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
 if (!supabaseUrl || !supabaseAnonKey) {
     console.warn('Supabase credentials not found. Running in offline mode with localStorage.');
@@ -467,7 +468,7 @@ export const getOrCreateSubmissionId = async (taskId: string, userId: string): P
         .single();
 
     if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 is "No rows found"
-        console.error('Error fetching existing submission:', fetchError);
+        console.error(`Error fetching existing submission for task ${taskId}, user ${userId}:`, fetchError);
         throw fetchError;
     }
 
@@ -481,13 +482,14 @@ export const getOrCreateSubmissionId = async (taskId: string, userId: string): P
                 user_id: userId,
                 cultural_score: 0,
                 language_similarity: 'na',
-                language_similarity_justification: ''
+                language_similarity_justification: '',
+                completed: false // Default to not completed on initial creation
             })
             .select('id')
             .single();
 
         if (insertError) {
-            console.error('Error creating new submission:', insertError);
+            console.error(`Error creating new submission for task ${taskId}, user ${userId}:`, insertError);
             throw insertError;
         }
         return newSubmission?.id || null;
