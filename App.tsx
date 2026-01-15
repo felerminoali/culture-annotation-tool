@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Annotation, SelectionState, ImageAnnotation, ShapeType, DecisionStatus, User, TaskAssignment, UserRole, Project, Task, ProjectAssignment, Language, UserTaskSubmission } from './types';
 import TextDisplay from './components/TextDisplay';
@@ -32,6 +33,7 @@ const App: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projectAssignments, setProjectAssignments] = useState<ProjectAssignment[]>([]);
   const [allTaskSubmissions, setAllTaskSubmissions] = useState<UserTaskSubmission[]>([]); // For Admin Dashboard agreement
+  const [submissionUpdateKey, setSubmissionUpdateKey] = useState(0); // Key to force AdminDashboard refresh
 
   // Form State
   const [formData, setFormData] = useState({
@@ -220,6 +222,7 @@ const App: React.FC = () => {
         setAssignments(taskAssignmentsData);
         setGlobalLog(globalAnnotationsData);
         setAllTaskSubmissions(allSubmissionsData);
+        setSubmissionUpdateKey(prev => prev + 1); // Increment key after updating global submissions
 
         const savedLang = localStorage.getItem('annotate_language') as Language;
         if (savedLang) setLanguage(savedLang);
@@ -296,6 +299,7 @@ const App: React.FC = () => {
         // After saving, re-fetch global submissions to update agreement dashboard
         const updatedSubmissions = await supabaseService.fetchAllUserTaskSubmissions();
         setAllTaskSubmissions(updatedSubmissions);
+        setSubmissionUpdateKey(prev => prev + 1); // Increment key after updating global submissions
 
       } catch (error) {
         console.error('Error saving task data:', error);
@@ -678,6 +682,7 @@ const App: React.FC = () => {
       ]);
       setGlobalLog(updatedAllAnnotations);
       setAllTaskSubmissions(updatedAllSubmissions);
+      setSubmissionUpdateKey(prev => prev + 1); // Increment key after updating global submissions
 
       if (currentUser) {
         const [userCompletedTasks, userAnnotations, userImageAnnotations, userSubmission] = await Promise.all([
@@ -792,6 +797,7 @@ const App: React.FC = () => {
     setViewMode('workspace');
     setGlobalLog([]); // Clear global log on logout
     setAllTaskSubmissions([]); // Clear all submissions on logout
+    setSubmissionUpdateKey(0); // Reset key on logout
     setError(''); // Clear any previous errors
   };
 
@@ -1106,6 +1112,7 @@ const App: React.FC = () => {
       // Re-fetch all submissions to update AdminDashboard agreement metrics
       const updatedAllSubmissions = await supabaseService.fetchAllUserTaskSubmissions();
       setAllTaskSubmissions(updatedAllSubmissions);
+      setSubmissionUpdateKey(prev => prev + 1); // Increment key after updating global submissions
 
       setShowResubmitSuccess(true);
       setTimeout(() => {
@@ -1145,6 +1152,7 @@ const App: React.FC = () => {
       ]);
       setGlobalLog(updatedGlobalLog);
       setAllTaskSubmissions(updatedAllSubmissions);
+      setSubmissionUpdateKey(prev => prev + 1); // Increment key after updating global submissions
     } catch (error) {
       console.error('Error deleting submission:', error);
       setError('Failed to delete submission. Please try again.');
@@ -1564,6 +1572,7 @@ const App: React.FC = () => {
           {viewMode === 'admin' ? (
             <div className="p-10 max-w-7xl mx-auto">
               <AdminDashboard
+                key={submissionUpdateKey} // Added key here
                 activeTab={adminTab}
                 users={users}
                 allAnnotations={globalLog}
