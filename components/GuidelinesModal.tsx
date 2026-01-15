@@ -15,7 +15,7 @@ const GuidelinesModal: React.FC<GuidelinesModalProps> = ({ isOpen, onClose, lang
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden transform transition-all zoom-in duration-200">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden transform transition-all zoom-in duration-200">
         <div className="bg-slate-50 px-8 py-6 border-b border-slate-100 flex justify-between items-center">
           <div>
             <h3 className="text-xl font-black text-slate-900">{t('annotation_guidelines', language)}</h3>

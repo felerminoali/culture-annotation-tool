@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Annotation, SelectionState, ImageAnnotation, ShapeType, DecisionStatus, User, TaskAssignment, UserRole, Project, Task, ProjectAssignment, Language, UserTaskSubmission } from './types';
 import TextDisplay from './components/TextDisplay';
@@ -13,7 +12,7 @@ import AdminDashboard from './components/AdminDashboard';
 import { getSmartSuggestions } from './services/geminiService'; // Removed getTextToSpeech as per requirement to replace it with native audio
 import { t, TranslationKey } from './services/i18n';
 import * as supabaseService from './services/supabaseService';
-
+import { generateUuid } from './services/supabaseService';
 
 
 const App: React.FC = () => {
@@ -928,7 +927,7 @@ const App: React.FC = () => {
       } : a);
     } else if (currentSelection) {
       const newAnnotation: Annotation = {
-        id: Math.random().toString(36).substr(2, 9),
+        id: generateUuid(), // Use generated UUID
         ...currentSelection,
         comment,
         isImportant,
@@ -976,7 +975,7 @@ const App: React.FC = () => {
       } : a);
     } else if (currentSelection) {
       const newAnnotation: Annotation = {
-        id: Math.random().toString(36).substr(2, 9),
+        id: generateUuid(), // Use generated UUID
         ...currentSelection,
         comment: '',
         isImportant: false,
@@ -1036,7 +1035,7 @@ const App: React.FC = () => {
       updatedImageAnnos = (imageAnnotations[paraIdxKey] || []).map(a => a.id === editingImageAnno.id ? { ...a, ...data } : a);
     } else if (pendingPin) {
       const newAnno: ImageAnnotation = {
-        id: Math.random().toString(36).substr(2, 9),
+        id: generateUuid(), // Use generated UUID
         x: pendingPin.x,
         y: pendingPin.y,
         width: pendingPin.width,
@@ -1162,7 +1161,7 @@ const App: React.FC = () => {
         throw new Error("User ID not available for AI suggestions.");
       }
       const newAnnos: Annotation[] = (suggestions || []).map((s: any) => ({
-        id: Math.random().toString(36).substr(2, 9),
+        id: generateUuid(), // Use generated UUID
         start: s.start,
         end: s.end,
         text: s.text,

@@ -1,4 +1,3 @@
-
 import { createClient, SupabaseClient, User as SupabaseUser } from '@supabase/supabase-js';
 import { User, Project, Task, Annotation, ImageAnnotation, TaskAssignment, ProjectAssignment, DecisionStatus, UserTaskSubmission } from '../types';
 
@@ -13,6 +12,23 @@ if (!supabaseUrl || !supabaseAnonKey) {
 export const supabase: SupabaseClient | null = supabaseUrl && supabaseAnonKey
     ? createClient(supabaseUrl, supabaseAnonKey)
     : null;
+
+/**
+ * Generates a UUID (Universally Unique Identifier).
+ * Uses Web Crypto API's `randomUUID` which is widely supported in modern browsers.
+ */
+export const generateUuid = (): string => {
+    // Check if crypto.randomUUID is available (modern browsers)
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        return crypto.randomUUID();
+    }
+    // Fallback for environments where crypto.randomUUID might not be available (less likely for this project)
+    // This fallback is a basic v4 UUID generator, but it's better to rely on native.
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+};
 
 // ============================================
 // AUTHENTICATION
