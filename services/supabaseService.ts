@@ -2,39 +2,83 @@
 import { createClient, SupabaseClient, User as SupabaseUser } from '@supabase/supabase-js';
 import { User, Project, Task, Annotation, ImageAnnotation, TaskAssignment, ProjectAssignment, DecisionStatus, UserTaskSubmission } from '../types';
 
-// Access environment variables using import.meta.env, which is the standard Vite way
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// Access environment variables using import.meta.env for Vite projects
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+    console.warn('Supabase credentials not found. Running in offline mode with localStorage.');
+}
 
 export const supabase: SupabaseClient | null = supabaseUrl && supabaseAnonKey
     ? createClient(supabaseUrl, supabaseAnonKey)
     : null;
 
-if (!supabase) {
-    console.warn('Supabase credentials not found. Supabase features will be disabled. Please check your .env file.');
-}
-
-/* ============================================
-   UUID UTILITIES (CRITICAL FIX)
-============================================ */
-
-export const generateUuid = (): string => {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-    const r = Math.random() * 16 | 0;
-    const v = c === 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
+/**
+ * Helper function to validate UUID format.
+ * A UUID is typically 36 characters long including hyphens.
+ */
+export const isValidUuid = (id: string): boolean => {
+    // console.log(`[isValidUuid] Checking ID: "${id}"`); // Added for debugging
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const isValid = uuidRegex.test(id);
+    // console.log(`[isValidUuid] ID "${id}" is ${isValid ? 'valid' : 'INVALID'}`); // Added for debugging
+    return isValid;
 };
 
-export const isValidUuid = (uuid: string): boolean =>
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(uuid);
+/**
+ * Generates a UUID (Universally Unique Identifier) using crypto.randomUUID if available,
+ * otherwise falls back to a custom implementation. Includes validation and retries
+ * to ensure a valid UUID is always returned.
+ */
+export const generateUuid = (attempts = 0): string => {
+    if (attempts >= 5) { // Limit retry attempts to prevent infinite recursion
+        console.error('Failed to generate a valid UUID after multiple attempts.');
+        throw new Error('Failed to generate a valid UUID after multiple attempts.');
+    }
 
-const ensureUuid = (id?: string): string =>
-  id && isValidUuid(id) ? id : generateUuid();
+    let generatedId: string;
 
+    // Attempt to use Web Crypto API's `randomUUID` for robust and standard UUIDs
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        try {
+            const cryptoId = crypto.randomUUID();
+            console.log(`[generateUuid - Attempt ${attempts + 1}] Raw crypto.randomUUID: "${cryptoId}"`);
+            if (isValidUuid(cryptoId)) {
+                console.log(`[generateUuid - Attempt ${attempts + 1}] Crypto UUID valid: "${cryptoId}"`);
+                return cryptoId;
+            } else {
+                console.warn(`[generateUuid - Attempt ${attempts + 1}] Crypto UUID INVALID: "${cryptoId}". Retrying...`);
+                return generateUuid(attempts + 1); // Retry
+            }
+        } catch (e) {
+            console.error(`[generateUuid - Attempt ${attempts + 1}] Error with crypto.randomUUID, falling back to custom generator:`, e);
+            // This implicitly continues to the fallback block below if an error occurs.
+        }
+    }
+
+    // Fallback UUID generation (v4-like, using Math.random for each segment)
+    // This part is reached if crypto.randomUUID is not available or throws an error.
+    let d = new Date().getTime(); // Timestamp
+    if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
+        d += performance.now(); // Add high-precision timestamp
+    }
+    generatedId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = (d + Math.random() * 16) % 16 | 0;
+        d = Math.floor(d / 16);
+        return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+    });
+    console.log(`[generateUuid - Attempt ${attempts + 1}] Raw fallback UUID: "${generatedId}"`);
+
+    // Final validation for fallback generated ID
+    if (isValidUuid(generatedId)) {
+        console.log(`[generateUuid - Attempt ${attempts + 1}] Fallback UUID valid: "${generatedId}"`);
+        return generatedId;
+    } else {
+        console.warn(`[generateUuid - Attempt ${attempts + 1}] Fallback UUID INVALID: "${generatedId}". Retrying...`);
+        return generateUuid(attempts + 1); // Retry
+    }
+};
 
 // ============================================
 // AUTHENTICATION
@@ -102,23 +146,6 @@ export const getCurrentUser = async (): Promise<User | null> => {
         role: profile.role,
         password: '' // Not returned from database
     };
-};
-
-/**
- * Safely sets up an authentication state change listener.
- * Returns the subscription object or a dummy object if Supabase is not initialized.
- * The callback type is explicitly defined to avoid runtime errors when `supabase.auth` is not available.
- */
-export const onAuthStateChange = (callback: (event: string, session: any | null) => void) => {
-    if (!supabase) {
-        console.warn('Supabase client not initialized, cannot listen for auth changes.');
-        // Return a dummy subscription object to prevent errors in App.tsx cleanup
-        return {
-            data: { subscription: { unsubscribe: () => {} } },
-            error: new Error('Supabase client not initialized')
-        };
-    }
-    return supabase.auth.onAuthStateChange(callback);
 };
 
 // ============================================
@@ -276,7 +303,8 @@ export const updateProject = async (id: string, updates: Partial<Project>) => {
 
 export const upsertProject = async (project: Project): Promise<Project | null> => {
     if (!supabase) throw new Error('Supabase not initialized');
-    const { data: { user } } = await supabase.auth.getUser();
+    // Safely destructure user to prevent errors if user is null/undefined
+    const { data: { user } = {} } = await supabase.auth.getUser();
     if (!user) throw new Error('User not authenticated');
 
     const payload = {
@@ -562,7 +590,7 @@ export const saveTaskSubmission = async (
         .single();
 
     if (error) {
-        console.error('Error upserting task submission:', error);
+        console.error('Supabase Error (saveTaskSubmission):', error);
         throw error;
     }
 
@@ -693,18 +721,37 @@ export const saveAnnotations = async (taskId: string, userId: string, annotation
     if (!currentSubmissionId) throw new Error('Failed to get or create submission ID for annotations');
 
     // Delete existing annotations for this submission/task/user to avoid duplicates and handle updates simply
-    await supabase
+    const { error: deleteError } = await supabase
         .from('annotations')
         .delete()
         .eq('submission_id', currentSubmissionId)
         .eq('task_id', taskId)
         .eq('user_id', userId);
 
+    if (deleteError) {
+        console.error('Supabase Error (delete existing annotations):', deleteError);
+        // Continue, as delete might fail if no records exist, or due to RLS,
+        // but we want to attempt insert anyway for new annotations.
+        // For a critical app, you might want more robust error handling here.
+    }
+
     if (annotations.length === 0) return { error: null };
 
-    // Insert new annotations
-    const annotationsData = annotations.map(a => ({
-        id: ensureUuid(a.id), // Keep client-generated ID
+    // Pre-validate and fix IDs before insertion
+    const validatedAnnotationsData = annotations.map(a => {
+        // First line of defense: validate and regenerate if needed
+        let validatedId = a.id;
+        if (!isValidUuid(a.id)) {
+            console.warn(`[saveAnnotations] Invalid UUID found for text annotation ID: ${a.id} during initial map. Regenerating.`);
+            validatedId = generateUuid();
+        }
+        return {
+            ...a,
+            id: validatedId // Use the validated/regenerated ID for further processing
+        };
+    }).map(a => ({
+        // ULTIMATE SAFETY NET: Re-validate and regenerate just before mapping to DB schema
+        id: isValidUuid(a.id) ? a.id : generateUuid(), 
         submission_id: currentSubmissionId,
         task_id: taskId,
         user_id: userId,
@@ -725,13 +772,19 @@ export const saveAnnotations = async (taskId: string, userId: string, annotation
         created_at: new Date(a.timestamp).toISOString(),
     }));
 
-    const { error } = await supabase
-        .from('annotations')
-        .insert(annotationsData);
+    console.log('[saveAnnotations] Attempting to insert:', validatedAnnotationsData); // CRITICAL LOG
 
-    if (error) {
-        console.error('Error inserting annotations:', error);
-        throw error;
+    const { error: insertError } = await supabase
+        .from('annotations')
+        .insert(validatedAnnotationsData);
+
+    if (insertError) {
+        console.error('Supabase Error (insert annotations):', insertError);
+        // Log the problematic data for diagnostics
+        if (insertError.message.includes('invalid input syntax for type uuid')) {
+            console.error('[saveAnnotations] Attempted to insert annotations with invalid UUIDs:', validatedAnnotationsData);
+        }
+        throw insertError;
     }
     return { error: null };
 };
@@ -865,7 +918,8 @@ export const updateAnnotation = async (id: string, updates: Partial<Annotation>)
     if (updates.cultureProxy !== undefined) payload.culture_proxy = updates.cultureProxy;
     if (updates.issueCategory !== undefined) payload.issue_category = updates.issueCategory;
     if (updates.issueDescription !== undefined) payload.issue_description = updates.issueDescription;
-    payload.created_at = new Date(Date.now()).toISOString(); // Update timestamp
+    // Updated at will be handled by the trigger
+    // payload.created_at = new Date(Date.now()).toISOString(); // Not updated here, only on create
 
     const { error } = await supabase
         .from('annotations')
@@ -873,7 +927,7 @@ export const updateAnnotation = async (id: string, updates: Partial<Annotation>)
         .eq('id', id);
 
     if (error) {
-        console.error('Error updating annotation:', error);
+        console.error('Supabase Error (update annotation):', error);
         throw error;
     }
     return { error: null };
@@ -888,7 +942,7 @@ export const deleteAnnotation = async (id: string) => {
         .eq('id', id);
 
     if (error) {
-        console.error('Error deleting annotation:', error);
+        console.error('Supabase Error (delete annotation):', error);
         throw error;
     }
     return { error: null };
@@ -905,16 +959,32 @@ export const saveImageAnnotations = async (taskId: string, userId: string, image
     if (!currentSubmissionId) throw new Error('Failed to get or create submission ID for image annotations');
 
     // Delete existing image annotations for this submission/task/user
-    await supabase
+    const { error: deleteError } = await supabase
         .from('image_annotations')
         .delete()
         .eq('submission_id', currentSubmissionId)
         .eq('task_id', taskId)
         .eq('user_id', userId);
 
+    if (deleteError) {
+        console.error('Supabase Error (delete existing image annotations):', deleteError);
+    }
+
     const flattenedImageAnnotations = Object.entries(imageAnnotations).flatMap(([paraIdx, annos]) =>
-        annos.map(a => ({
-            id: ensureUuid(a.id),
+        annos.map(a => {
+            // First line of defense: validate and regenerate if needed
+            let validatedId = a.id;
+            if (!isValidUuid(a.id)) {
+                console.warn(`[saveImageAnnotations] Invalid UUID found for image annotation ID (paragraph ${paraIdx}): ${a.id} during initial map. Regenerating.`);
+                validatedId = generateUuid();
+            }
+            return {
+                ...a,
+                id: validatedId // Use the validated/regenerated ID for further processing
+            };
+        }).map(a => ({
+            // ULTIMATE SAFETY NET: Re-validate and regenerate just before mapping to DB schema
+            id: isValidUuid(a.id) ? a.id : generateUuid(),
             submission_id: currentSubmissionId,
             task_id: taskId,
             user_id: userId,
@@ -942,13 +1012,19 @@ export const saveImageAnnotations = async (taskId: string, userId: string, image
 
     if (flattenedImageAnnotations.length === 0) return { error: null };
 
-    const { error } = await supabase
+    console.log('[saveImageAnnotations] Attempting to insert:', flattenedImageAnnotations); // CRITICAL LOG
+
+    const { error: insertError } = await supabase
         .from('image_annotations')
         .insert(flattenedImageAnnotations);
 
-    if (error) {
-        console.error('Error inserting image annotations:', error);
-        throw error;
+    if (insertError) {
+        console.error('Supabase Error (insert image annotations):', insertError);
+        // Log the problematic data for diagnostics
+        if (insertError.message.includes('invalid input syntax for type uuid')) {
+            console.error('[saveImageAnnotations] Attempted to insert image annotations with invalid UUIDs:', flattenedImageAnnotations);
+        }
+        throw insertError;
     }
     return { error: null };
 };
@@ -961,15 +1037,31 @@ export const saveImageAnnotationsFlat = async (taskId: string, userId: string, i
     if (!currentSubmissionId) throw new Error('Failed to get or create submission ID for image annotations');
 
     // Delete existing image annotations for this submission/task/user
-    await supabase
+    const { error: deleteError } = await supabase
         .from('image_annotations')
         .delete()
         .eq('submission_id', currentSubmissionId)
         .eq('task_id', taskId)
         .eq('user_id', userId);
 
-    const imageAnnotationsData = imageAnnotations.map(a => ({
-        id: a.id,
+    if (deleteError) {
+        console.error('Supabase Error (delete existing image annotations for import):', deleteError);
+    }
+
+    const imageAnnotationsData = imageAnnotations.map(a => {
+        // First line of defense: validate and regenerate if needed
+        let validatedId = a.id;
+        if (!isValidUuid(a.id)) {
+            console.warn(`[saveImageAnnotationsFlat] Invalid UUID found for imported image annotation ID (paragraph ${a.paragraph_index}): ${a.id} during initial map. Regenerating.`);
+            validatedId = generateUuid();
+        }
+        return {
+            ...a,
+            id: validatedId // Use the validated/regenerated ID for further processing
+        };
+    }).map(a => ({
+        // ULTIMATE SAFETY NET: Re-validate and regenerate just before mapping to DB schema
+        id: isValidUuid(a.id) ? a.id : generateUuid(),
         submission_id: currentSubmissionId,
         task_id: taskId,
         user_id: userId,
@@ -996,13 +1088,19 @@ export const saveImageAnnotationsFlat = async (taskId: string, userId: string, i
 
     if (imageAnnotationsData.length === 0) return { error: null };
 
-    const { error } = await supabase
+    console.log('[saveImageAnnotationsFlat] Attempting to insert:', imageAnnotationsData); // CRITICAL LOG
+
+    const { error: insertError } = await supabase
         .from('image_annotations')
         .insert(imageAnnotationsData);
 
-    if (error) {
-        console.error('Error inserting image annotations:', error);
-        throw error;
+    if (insertError) {
+        console.error('Supabase Error (insert image annotations for import):', insertError);
+        // Log the problematic data for diagnostics
+        if (insertError.message.includes('invalid input syntax for type uuid')) {
+            console.error('[saveImageAnnotationsFlat] Attempted to insert imported image annotations with invalid UUIDs:', imageAnnotationsData);
+        }
+        throw insertError;
     }
     return { error: null };
 };
@@ -1194,7 +1292,11 @@ export const upsertTaskAssignment = async (taskId: string, assignedToEmail: stri
 
     // If 'all', remove existing explicit assignments for this task
     if (assignedToEmail === 'all') {
-        await supabase.from('task_assignments').delete().eq('task_id', taskId);
+        const {error} = await supabase.from('task_assignments').delete().eq('task_id', taskId);
+        if (error) {
+            console.error('Supabase Error (delete task assignment for "all"):', error);
+            throw error;
+        }
         return { data: null, error: null };
     }
 
@@ -1210,7 +1312,7 @@ export const upsertTaskAssignment = async (taskId: string, assignedToEmail: stri
         .single();
 
     if (error) {
-        console.error('Error upserting task assignment:', error);
+        console.error('Supabase Error (upsert task assignment):', error);
         throw error;
     }
     return { data, error: null };
@@ -1226,7 +1328,7 @@ export const deleteTaskAssignment = async (taskId: string, assignedToEmail: stri
         .eq('assigned_to_email', assignedToEmail);
 
     if (error) {
-        console.error('Error deleting task assignment:', error);
+        console.error('Supabase Error (delete task assignment):', error);
         throw error;
     }
     return { error: null };
