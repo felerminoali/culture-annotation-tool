@@ -113,8 +113,9 @@ export const getCurrentUser = async (): Promise<User | null> => {
 /**
  * Safely sets up an authentication state change listener.
  * Returns the subscription object or a dummy object if Supabase is not initialized.
+ * The callback type is explicitly defined to avoid runtime errors when `supabase.auth` is not available.
  */
-export const onAuthStateChange = (callback: Parameters<typeof supabase.auth.onAuthStateChange>[0]) => {
+export const onAuthStateChange = (callback: (event: string, session: any | null) => void) => {
     if (!supabase) {
         console.warn('Supabase client not initialized, cannot listen for auth changes.');
         // Return a dummy subscription object to prevent errors in App.tsx cleanup
