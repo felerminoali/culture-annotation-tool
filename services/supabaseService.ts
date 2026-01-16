@@ -25,29 +25,35 @@ export const isValidUuid = (id: string): boolean => {
 
 /**
  * Generates a UUID (Universally Unique Identifier) using crypto.randomUUID if available,
- * otherwise falls back to a custom implementation. Includes validation to ensure a valid UUID is always returned.
+ * otherwise falls back to a custom implementation. Includes validation and retries
+ * to ensure a valid UUID is always returned.
  */
-export const generateUuid = (): string => {
+export const generateUuid = (attempts = 0): string => {
+    if (attempts >= 5) { // Limit retry attempts to prevent infinite recursion
+        console.error('Failed to generate a valid UUID after multiple attempts.');
+        throw new Error('Failed to generate a valid UUID after multiple attempts.');
+    }
+
     let generatedId: string;
 
     // Attempt to use Web Crypto API's `randomUUID` for robust and standard UUIDs
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
         try {
             generatedId = crypto.randomUUID();
-            console.log('Generated UUID (crypto.randomUUID):', generatedId);
-            // Validate immediately
+            console.log(`[Attempt ${attempts + 1}] Generated UUID (crypto.randomUUID):`, generatedId);
             if (isValidUuid(generatedId)) {
                 return generatedId;
             } else {
-                console.error('crypto.randomUUID returned an invalid UUID:', generatedId, 'Attempting fallback.');
+                console.warn(`[Attempt ${attempts + 1}] crypto.randomUUID returned an invalid UUID: ${generatedId}. Retrying with generateUuid...`);
+                return generateUuid(attempts + 1); // Retry
             }
         } catch (e) {
-            console.error('Error with crypto.randomUUID, falling back to custom generator:', e);
+            console.error(`[Attempt ${attempts + 1}] Error with crypto.randomUUID, falling back to custom generator:`, e);
+            // Fallback will be attempted in the next block.
         }
     }
 
     // Fallback UUID generation (v4-like, using Math.random for each segment)
-    // This method is used if crypto.randomUUID is unavailable or throws an error.
     let d = new Date().getTime(); // Timestamp
     if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
         d += performance.now(); // Add high-precision timestamp
@@ -57,16 +63,15 @@ export const generateUuid = (): string => {
         d = Math.floor(d / 16);
         return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
     });
-    console.log('Generated UUID (fallback):', generatedId);
+    console.log(`[Attempt ${attempts + 1}] Generated UUID (fallback):`, generatedId);
 
     // Final validation for fallback generated ID
-    if (!isValidUuid(generatedId)) {
-        console.error('Fallback UUID generator produced an invalid UUID:', generatedId, 'This should not happen. Returning an empty string as a last resort to prevent crash.');
-        // As a last resort, if even the fallback fails to produce a valid UUID, return an empty string.
-        // This is highly unlikely if the fallback logic is correct.
-        return ''; 
+    if (isValidUuid(generatedId)) {
+        return generatedId;
+    } else {
+        console.warn(`[Attempt ${attempts + 1}] Fallback UUID generator produced an invalid UUID: ${generatedId}. Retrying with generateUuid...`);
+        return generateUuid(attempts + 1); // Retry
     }
-    return generatedId;
 };
 
 // ============================================
@@ -292,7 +297,7 @@ export const updateProject = async (id: string, updates: Partial<Project>) => {
 
 export const upsertProject = async (project: Project): Promise<Project | null> => {
     if (!supabase) throw new Error('Supabase not initialized');
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } = {} } = await supabase.auth.getUser();
     if (!user) throw new Error('User not authenticated');
 
     const payload = {
@@ -728,12 +733,12 @@ export const saveAnnotations = async (taskId: string, userId: string, annotation
     // Pre-validate and fix IDs before insertion
     const validatedAnnotationsData = annotations.map(a => {
         if (!isValidUuid(a.id)) {
-            console.warn(`Invalid UUID found for text annotation ID: ${a.id}. Regenerating new ID.`);
-            return { ...a, id: generateUuid() };
+            console.warn(`[saveAnnotations] Invalid UUID found for text annotation ID: ${a.id}. Regenerating new ID.`);
+            return { ...a, id: generateUuid() }; // Using the fortified generateUuid
         }
         return a;
     }).map(a => ({
-        id: a.id, // Keep client-generated ID
+        id: a.id, // This `a.id` should now be valid
         submission_id: currentSubmissionId,
         task_id: taskId,
         user_id: userId,
@@ -754,6 +759,8 @@ export const saveAnnotations = async (taskId: string, userId: string, annotation
         created_at: new Date(a.timestamp).toISOString(),
     }));
 
+    console.log('[saveAnnotations] Attempting to insert:', validatedAnnotationsData); // CRITICAL LOG
+
     const { error: insertError } = await supabase
         .from('annotations')
         .insert(validatedAnnotationsData);
@@ -762,7 +769,7 @@ export const saveAnnotations = async (taskId: string, userId: string, annotation
         console.error('Supabase Error (insert annotations):', insertError);
         // Log the problematic data for diagnostics
         if (insertError.message.includes('invalid input syntax for type uuid')) {
-            console.error('Attempted to insert annotations with invalid UUIDs:', validatedAnnotationsData);
+            console.error('[saveAnnotations] Attempted to insert annotations with invalid UUIDs:', validatedAnnotationsData);
         }
         throw insertError;
     }
@@ -872,7 +879,7 @@ export const fetchAnnotationsForTasks = async (taskIds: string[]): Promise<Annot
         isRelevant: a.is_relevant || 'na',
         relevantJustification: a.relevant_justification || '',
         isSupported: a.is_supported || 'na',
-        supportedJustification: a.supported_justification || '',
+        supportedJustification: a.supportedJustification || '',
         cultureProxy: a.culture_proxy || '',
         type: a.annotation_type || 'manual',
         subtype: a.subtype,
@@ -953,8 +960,8 @@ export const saveImageAnnotations = async (taskId: string, userId: string, image
     const flattenedImageAnnotations = Object.entries(imageAnnotations).flatMap(([paraIdx, annos]) =>
         annos.map(a => {
             if (!isValidUuid(a.id)) {
-                console.warn(`Invalid UUID found for image annotation ID (paragraph ${paraIdx}): ${a.id}. Regenerating new ID.`);
-                return { ...a, id: generateUuid() };
+                console.warn(`[saveImageAnnotations] Invalid UUID found for image annotation ID (paragraph ${paraIdx}): ${a.id}. Regenerating new ID.`);
+                return { ...a, id: generateUuid() }; // Using the fortified generateUuid
             }
             return a;
         }).map(a => ({
@@ -976,6 +983,7 @@ export const saveImageAnnotations = async (taskId: string, userId: string, image
             relevant_justification: a.relevantJustification,
             is_supported: a.isSupported,
             supported_justification: a.supportedJustification,
+            // FIX: Use 'cultureProxy' from the ImageAnnotation type
             culture_proxy: a.cultureProxy,
             subtype: a.subtype,
             issue_category: a.issueCategory,
@@ -986,6 +994,8 @@ export const saveImageAnnotations = async (taskId: string, userId: string, image
 
     if (flattenedImageAnnotations.length === 0) return { error: null };
 
+    console.log('[saveImageAnnotations] Attempting to insert:', flattenedImageAnnotations); // CRITICAL LOG
+
     const { error: insertError } = await supabase
         .from('image_annotations')
         .insert(flattenedImageAnnotations);
@@ -994,7 +1004,7 @@ export const saveImageAnnotations = async (taskId: string, userId: string, image
         console.error('Supabase Error (insert image annotations):', insertError);
         // Log the problematic data for diagnostics
         if (insertError.message.includes('invalid input syntax for type uuid')) {
-            console.error('Attempted to insert image annotations with invalid UUIDs:', flattenedImageAnnotations);
+            console.error('[saveImageAnnotations] Attempted to insert image annotations with invalid UUIDs:', flattenedImageAnnotations);
         }
         throw insertError;
     }
@@ -1022,8 +1032,8 @@ export const saveImageAnnotationsFlat = async (taskId: string, userId: string, i
 
     const imageAnnotationsData = imageAnnotations.map(a => {
         if (!isValidUuid(a.id)) {
-            console.warn(`Invalid UUID found for imported image annotation ID (paragraph ${a.paragraph_index}): ${a.id}. Regenerating new ID.`);
-            return { ...a, id: generateUuid() };
+            console.warn(`[saveImageAnnotationsFlat] Invalid UUID found for imported image annotation ID (paragraph ${a.paragraph_index}): ${a.id}. Regenerating new ID.`);
+            return { ...a, id: generateUuid() }; // Using the fortified generateUuid
         }
         return a;
     }).map(a => ({
@@ -1045,6 +1055,7 @@ export const saveImageAnnotationsFlat = async (taskId: string, userId: string, i
         relevant_justification: a.relevantJustification,
         is_supported: a.isSupported,
         supported_justification: a.supportedJustification,
+        // FIX: Use 'cultureProxy' from the ImageAnnotation type
         culture_proxy: a.cultureProxy,
         subtype: a.subtype,
         issue_category: a.issueCategory,
@@ -1054,6 +1065,8 @@ export const saveImageAnnotationsFlat = async (taskId: string, userId: string, i
 
     if (imageAnnotationsData.length === 0) return { error: null };
 
+    console.log('[saveImageAnnotationsFlat] Attempting to insert:', imageAnnotationsData); // CRITICAL LOG
+
     const { error: insertError } = await supabase
         .from('image_annotations')
         .insert(imageAnnotationsData);
@@ -1062,7 +1075,7 @@ export const saveImageAnnotationsFlat = async (taskId: string, userId: string, i
         console.error('Supabase Error (insert image annotations for import):', insertError);
         // Log the problematic data for diagnostics
         if (insertError.message.includes('invalid input syntax for type uuid')) {
-            console.error('Attempted to insert imported image annotations with invalid UUIDs:', imageAnnotationsData);
+            console.error('[saveImageAnnotationsFlat] Attempted to insert imported image annotations with invalid UUIDs:', imageAnnotationsData);
         }
         throw insertError;
     }
