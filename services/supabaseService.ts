@@ -19,8 +19,11 @@ export const supabase: SupabaseClient | null = supabaseUrl && supabaseAnonKey
  * A UUID is typically 36 characters long including hyphens.
  */
 export const isValidUuid = (id: string): boolean => {
+    // console.log(`[isValidUuid] Checking ID: "${id}"`); // Added for debugging
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    return uuidRegex.test(id);
+    const isValid = uuidRegex.test(id);
+    // console.log(`[isValidUuid] ID "${id}" is ${isValid ? 'valid' : 'INVALID'}`); // Added for debugging
+    return isValid;
 };
 
 /**
@@ -39,16 +42,17 @@ export const generateUuid = (attempts = 0): string => {
     // Attempt to use Web Crypto API's `randomUUID` for robust and standard UUIDs
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
         try {
-            generatedId = crypto.randomUUID();
-            console.log(`[Attempt ${attempts + 1}] Generated UUID (crypto.randomUUID):`, generatedId);
-            if (isValidUuid(generatedId)) {
-                return generatedId;
+            const cryptoId = crypto.randomUUID();
+            console.log(`[generateUuid - Attempt ${attempts + 1}] Raw crypto.randomUUID: "${cryptoId}"`);
+            if (isValidUuid(cryptoId)) {
+                console.log(`[generateUuid - Attempt ${attempts + 1}] Crypto UUID valid: "${cryptoId}"`);
+                return cryptoId;
             } else {
-                console.warn(`[Attempt ${attempts + 1}] crypto.randomUUID returned an invalid UUID: ${generatedId}. Retrying with generateUuid...`);
+                console.warn(`[generateUuid - Attempt ${attempts + 1}] Crypto UUID INVALID: "${cryptoId}". Retrying...`);
                 return generateUuid(attempts + 1); // Retry
             }
         } catch (e) {
-            console.error(`[Attempt ${attempts + 1}] Error with crypto.randomUUID, falling back to custom generator:`, e);
+            console.error(`[generateUuid - Attempt ${attempts + 1}] Error with crypto.randomUUID, falling back to custom generator:`, e);
             // This implicitly continues to the fallback block below if an error occurs.
         }
     }
@@ -64,13 +68,14 @@ export const generateUuid = (attempts = 0): string => {
         d = Math.floor(d / 16);
         return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
     });
-    console.log(`[Attempt ${attempts + 1}] Generated UUID (fallback):`, generatedId);
+    console.log(`[generateUuid - Attempt ${attempts + 1}] Raw fallback UUID: "${generatedId}"`);
 
     // Final validation for fallback generated ID
     if (isValidUuid(generatedId)) {
+        console.log(`[generateUuid - Attempt ${attempts + 1}] Fallback UUID valid: "${generatedId}"`);
         return generatedId;
     } else {
-        console.warn(`[Attempt ${attempts + 1}] Fallback UUID generator produced an invalid UUID: ${generatedId}. Retrying with generateUuid...`);
+        console.warn(`[generateUuid - Attempt ${attempts + 1}] Fallback UUID INVALID: "${generatedId}". Retrying...`);
         return generateUuid(attempts + 1); // Retry
     }
 };
@@ -734,13 +739,19 @@ export const saveAnnotations = async (taskId: string, userId: string, annotation
 
     // Pre-validate and fix IDs before insertion
     const validatedAnnotationsData = annotations.map(a => {
+        // First line of defense: validate and regenerate if needed
+        let validatedId = a.id;
         if (!isValidUuid(a.id)) {
-            console.warn(`[saveAnnotations] Invalid UUID found for text annotation ID: ${a.id}. Regenerating new ID.`);
-            return { ...a, id: generateUuid() }; // Using the fortified generateUuid
+            console.warn(`[saveAnnotations] Invalid UUID found for text annotation ID: ${a.id} during initial map. Regenerating.`);
+            validatedId = generateUuid();
         }
-        return a;
+        return {
+            ...a,
+            id: validatedId // Use the validated/regenerated ID for further processing
+        };
     }).map(a => ({
-        id: a.id, // This `a.id` should now be valid
+        // ULTIMATE SAFETY NET: Re-validate and regenerate just before mapping to DB schema
+        id: isValidUuid(a.id) ? a.id : generateUuid(), 
         submission_id: currentSubmissionId,
         task_id: taskId,
         user_id: userId,
@@ -961,13 +972,19 @@ export const saveImageAnnotations = async (taskId: string, userId: string, image
 
     const flattenedImageAnnotations = Object.entries(imageAnnotations).flatMap(([paraIdx, annos]) =>
         annos.map(a => {
+            // First line of defense: validate and regenerate if needed
+            let validatedId = a.id;
             if (!isValidUuid(a.id)) {
-                console.warn(`[saveImageAnnotations] Invalid UUID found for image annotation ID (paragraph ${paraIdx}): ${a.id}. Regenerating new ID.`);
-                return { ...a, id: generateUuid() }; // Using the fortified generateUuid
+                console.warn(`[saveImageAnnotations] Invalid UUID found for image annotation ID (paragraph ${paraIdx}): ${a.id} during initial map. Regenerating.`);
+                validatedId = generateUuid();
             }
-            return a;
+            return {
+                ...a,
+                id: validatedId // Use the validated/regenerated ID for further processing
+            };
         }).map(a => ({
-            id: a.id,
+            // ULTIMATE SAFETY NET: Re-validate and regenerate just before mapping to DB schema
+            id: isValidUuid(a.id) ? a.id : generateUuid(),
             submission_id: currentSubmissionId,
             task_id: taskId,
             user_id: userId,
@@ -985,7 +1002,6 @@ export const saveImageAnnotations = async (taskId: string, userId: string, image
             relevant_justification: a.relevantJustification,
             is_supported: a.isSupported,
             supported_justification: a.supportedJustification,
-            // FIX: Use 'cultureProxy' from the ImageAnnotation type
             culture_proxy: a.cultureProxy,
             subtype: a.subtype,
             issue_category: a.issueCategory,
@@ -1033,13 +1049,19 @@ export const saveImageAnnotationsFlat = async (taskId: string, userId: string, i
     }
 
     const imageAnnotationsData = imageAnnotations.map(a => {
+        // First line of defense: validate and regenerate if needed
+        let validatedId = a.id;
         if (!isValidUuid(a.id)) {
-            console.warn(`[saveImageAnnotationsFlat] Invalid UUID found for imported image annotation ID (paragraph ${a.paragraph_index}): ${a.id}. Regenerating new ID.`);
-            return { ...a, id: generateUuid() }; // Using the fortified generateUuid
+            console.warn(`[saveImageAnnotationsFlat] Invalid UUID found for imported image annotation ID (paragraph ${a.paragraph_index}): ${a.id} during initial map. Regenerating.`);
+            validatedId = generateUuid();
         }
-        return a;
+        return {
+            ...a,
+            id: validatedId // Use the validated/regenerated ID for further processing
+        };
     }).map(a => ({
-        id: a.id,
+        // ULTIMATE SAFETY NET: Re-validate and regenerate just before mapping to DB schema
+        id: isValidUuid(a.id) ? a.id : generateUuid(),
         submission_id: currentSubmissionId,
         task_id: taskId,
         user_id: userId,
@@ -1057,7 +1079,6 @@ export const saveImageAnnotationsFlat = async (taskId: string, userId: string, i
         relevant_justification: a.relevantJustification,
         is_supported: a.isSupported,
         supported_justification: a.supportedJustification,
-        // FIX: Use 'cultureProxy' from the ImageAnnotation type
         culture_proxy: a.cultureProxy,
         subtype: a.subtype,
         issue_category: a.issueCategory,
