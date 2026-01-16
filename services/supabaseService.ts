@@ -15,8 +15,17 @@ export const supabase: SupabaseClient | null = supabaseUrl && supabaseAnonKey
     : null;
 
 /**
+ * Helper function to validate UUID format.
+ * A UUID is typically 36 characters long including hyphens.
+ */
+export const isValidUuid = (id: string): boolean => {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(id);
+};
+
+/**
  * Generates a UUID (Universally Unique Identifier) using crypto.randomUUID if available,
- * otherwise falls back to a custom implementation.
+ * otherwise falls back to a custom implementation. Includes validation to ensure a valid UUID is always returned.
  */
 export const generateUuid = (): string => {
     let generatedId: string;
@@ -26,10 +35,14 @@ export const generateUuid = (): string => {
         try {
             generatedId = crypto.randomUUID();
             console.log('Generated UUID (crypto.randomUUID):', generatedId);
-            return generatedId;
+            // Validate immediately
+            if (isValidUuid(generatedId)) {
+                return generatedId;
+            } else {
+                console.error('crypto.randomUUID returned an invalid UUID:', generatedId, 'Attempting fallback.');
+            }
         } catch (e) {
-            console.error('Error with crypto.randomUUID, falling back:', e);
-            // Fallback if crypto.randomUUID throws an error
+            console.error('Error with crypto.randomUUID, falling back to custom generator:', e);
         }
     }
 
@@ -45,6 +58,14 @@ export const generateUuid = (): string => {
         return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
     });
     console.log('Generated UUID (fallback):', generatedId);
+
+    // Final validation for fallback generated ID
+    if (!isValidUuid(generatedId)) {
+        console.error('Fallback UUID generator produced an invalid UUID:', generatedId, 'This should not happen. Returning an empty string as a last resort to prevent crash.');
+        // As a last resort, if even the fallback fails to produce a valid UUID, return an empty string.
+        // This is highly unlikely if the fallback logic is correct.
+        return ''; 
+    }
     return generatedId;
 };
 
@@ -704,8 +725,14 @@ export const saveAnnotations = async (taskId: string, userId: string, annotation
 
     if (annotations.length === 0) return { error: null };
 
-    // Insert new annotations
-    const annotationsData = annotations.map(a => ({
+    // Pre-validate and fix IDs before insertion
+    const validatedAnnotationsData = annotations.map(a => {
+        if (!isValidUuid(a.id)) {
+            console.warn(`Invalid UUID found for text annotation ID: ${a.id}. Regenerating new ID.`);
+            return { ...a, id: generateUuid() };
+        }
+        return a;
+    }).map(a => ({
         id: a.id, // Keep client-generated ID
         submission_id: currentSubmissionId,
         task_id: taskId,
@@ -729,13 +756,13 @@ export const saveAnnotations = async (taskId: string, userId: string, annotation
 
     const { error: insertError } = await supabase
         .from('annotations')
-        .insert(annotationsData);
+        .insert(validatedAnnotationsData);
 
     if (insertError) {
         console.error('Supabase Error (insert annotations):', insertError);
         // Log the problematic data for diagnostics
         if (insertError.message.includes('invalid input syntax for type uuid')) {
-            console.error('Attempted to insert annotations with invalid UUIDs:', annotationsData);
+            console.error('Attempted to insert annotations with invalid UUIDs:', validatedAnnotationsData);
         }
         throw insertError;
     }
@@ -924,7 +951,13 @@ export const saveImageAnnotations = async (taskId: string, userId: string, image
     }
 
     const flattenedImageAnnotations = Object.entries(imageAnnotations).flatMap(([paraIdx, annos]) =>
-        annos.map(a => ({
+        annos.map(a => {
+            if (!isValidUuid(a.id)) {
+                console.warn(`Invalid UUID found for image annotation ID (paragraph ${paraIdx}): ${a.id}. Regenerating new ID.`);
+                return { ...a, id: generateUuid() };
+            }
+            return a;
+        }).map(a => ({
             id: a.id,
             submission_id: currentSubmissionId,
             task_id: taskId,
@@ -987,7 +1020,13 @@ export const saveImageAnnotationsFlat = async (taskId: string, userId: string, i
         console.error('Supabase Error (delete existing image annotations for import):', deleteError);
     }
 
-    const imageAnnotationsData = imageAnnotations.map(a => ({
+    const imageAnnotationsData = imageAnnotations.map(a => {
+        if (!isValidUuid(a.id)) {
+            console.warn(`Invalid UUID found for imported image annotation ID (paragraph ${a.paragraph_index}): ${a.id}. Regenerating new ID.`);
+            return { ...a, id: generateUuid() };
+        }
+        return a;
+    }).map(a => ({
         id: a.id,
         submission_id: currentSubmissionId,
         task_id: taskId,
