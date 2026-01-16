@@ -16,12 +16,6 @@ import * as supabaseService from './services/supabaseService';
 import { generateUuid } from './services/supabaseService';
 
 
-// Helper function to validate UUID format
-const isValidUuid = (id: string): boolean => {
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  return uuidRegex.test(id);
-};
-
 const App: React.FC = () => {
   // Auth & Navigation State
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -114,7 +108,7 @@ const App: React.FC = () => {
 
       // 3. Fallback: Unassigned tasks are hidden for non-admins to ensure strict project mode
       return false;
-    );
+    });
   }, [currentUser, assignments, tasks, projectAssignments, adminProjectFilter]);
 
   const allFilteredTasksCompleted = visibleTasks.length > 0 && visibleTasks.every(t => completedTaskIds.includes(t.id));
@@ -668,21 +662,13 @@ const App: React.FC = () => {
 
           // Save text annotations
           const incomingAnnos = (tData as any).annotations || [];
-          const validatedIncomingAnnos = incomingAnnos.map((a: Annotation) => ({
-            ...a,
-            id: isValidUuid(a.id) ? a.id : generateUuid() // Validate and regenerate ID if invalid
-          }));
-          await supabaseService.saveAnnotations(taskId, userId, validatedIncomingAnnos, submissionId);
+          await supabaseService.saveAnnotations(taskId, userId, incomingAnnos, submissionId);
 
           // Save image annotations
           const incomingImgAnnos = (tData as any).imageAnnotations || {};
           // Convert incomingImgAnnos (Record<string, any[]>) to a flat array for saveImageAnnotationsFlat
           const flatIncomingImgAnnos: ImageAnnotation[] = Object.entries(incomingImgAnnos).flatMap(([paraIdx, annos]) =>
-            (annos as any[]).map((a: ImageAnnotation) => ({
-              ...a,
-              id: isValidUuid(a.id) ? a.id : generateUuid(), // Validate and regenerate ID if invalid
-              paragraph_index: parseInt(paraIdx)
-            }))
+            (annos as any[]).map(a => ({ ...a, paragraph_index: parseInt(paraIdx) }))
           );
           // Use saveImageAnnotationsFlat which accepts a flat array
           await supabaseService.saveImageAnnotationsFlat(taskId, userId, flatIncomingImgAnnos, submissionId);
@@ -1264,17 +1250,16 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 overflow-hidden">
-      {/* GLOBAL FLOATING CHARACTER BUTTON - INFORMATION ICON (Only visible in workspace mode) */}
-      {viewMode === 'workspace' && (
-        <button
-          onClick={() => setIsProfileModalOpen(true)}
-          className="fixed bottom-8 right-8 w-16 h-16 bg-indigo-600 text-white rounded-full shadow-[0_20px_50px_-10px_rgba(79,70,229,0.5)] z-[9999] flex items-center justify-center hover:scale-110 hover:bg-indigo-700 active:scale-95 transition-all group"
-          title="Researcher Profile"
-        >
-          <i className="fa-solid fa-info-circle text-2xl group-hover:rotate-12 transition-transform"></i>
-        </button>
-      )}
+      {/* GLOBAL FLOATING CHARACTER BUTTON - INFORMATION ICON */}
+      <button
+        onClick={() => setIsProfileModalOpen(true)}
+        className="fixed bottom-8 right-8 w-16 h-16 bg-indigo-600 text-white rounded-full shadow-[0_20px_50px_-10px_rgba(79,70,229,0.5)] z-[9999] flex items-center justify-center hover:scale-110 hover:bg-indigo-700 active:scale-95 transition-all group"
+        title="Researcher Profile"
+      >
+        <i className="fa-solid fa-info-circle text-2xl group-hover:rotate-12 transition-transform"></i>
+      </button>
 
+      {/* SIDEBAR */}
       {/* SIDEBAR */}
       <aside className={`w-full ${isSidebarCollapsed ? 'md:w-20' : 'md:w-80'} bg-white border-r border-gray-200 flex flex-col shrink-0 overflow-hidden shadow-sm z-20 transition-all duration-300 ease-in-out`}>
         <div className={`p-6 border-b border-gray-100 bg-slate-50/30 flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
@@ -1678,23 +1663,7 @@ const App: React.FC = () => {
                             }}
                             onEditAnnotation={a => handleEditHighlight({ ...a, start: a.start + para.offset, end: a.end + para.offset })}
                           />
-                           <div className="flex justify-end mt-4">
-                            <button
-                              onClick={getAiSuggestions}
-                              disabled={isAiLoading}
-                              className="px-6 py-2.5 bg-blue-500 text-white rounded-xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-blue-600 transition-all shadow-lg active:scale-95 flex items-center disabled:opacity-50"
-                            >
-                              {isAiLoading ? (
-                                <>
-                                  <i className="fa-solid fa-spinner fa-spin mr-2"></i> {t('ai_predict', language)}...
-                                </>
-                              ) : (
-                                <>
-                                  <i className="fa-solid fa-wand-magic-sparkles mr-2"></i> {t('ai_predict', language)}
-                                </>
-                              )}
-                            </button>
-                          </div>
+
                         </div>
 
                         <div className="lg:sticky lg:top-10">
