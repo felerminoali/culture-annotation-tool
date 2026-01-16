@@ -14,34 +14,6 @@ if (!supabase) {
     console.warn('Supabase credentials not found. Supabase features will be disabled. Please check your .env file.');
 }
 
-/**
- * Generates a UUID (Universally Unique Identifier).
- * Uses Web Crypto API's `randomUUID` which is widely supported in modern browsers.
- */
-// export const generateUuid = (): string => {
-//     // Check if crypto.randomUUID is available (modern browsers)
-//     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-//         return crypto.randomUUID();
-//     }
-//     // Fallback for environments where crypto.randomUUID might not be available (less likely for this project)
-//     // This fallback is a basic v4 UUID generator, but it's better to rely on native.
-//     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-//         const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
-//         return v.toString(16);
-//     });
-// };
-
-// /**
-//  * Validates if a string is a well-formed UUID v4.
-//  * @param uuid The string to validate.
-//  * @returns True if the string is a valid UUID v4, false otherwise.
-//  */
-// export const isValidUuid = (uuid: string): boolean => {
-//     // Regular expression for UUID v4 (xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx)
-//     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-//     return uuidRegex.test(uuid);
-// };
-
 /* ============================================
    UUID UTILITIES (CRITICAL FIX)
 ============================================ */
@@ -62,9 +34,6 @@ export const isValidUuid = (uuid: string): boolean =>
 
 const ensureUuid = (id?: string): string =>
   id && isValidUuid(id) ? id : generateUuid();
-
-
-
 
 
 // ============================================
