@@ -2,9 +2,9 @@
 import { createClient, SupabaseClient, User as SupabaseUser } from '@supabase/supabase-js';
 import { User, Project, Task, Annotation, ImageAnnotation, TaskAssignment, ProjectAssignment, DecisionStatus, UserTaskSubmission } from '../types';
 
-// Access environment variables using process.env, which is defined by Vite's `define` config
-const supabaseUrl = process.env.VITE_SUPABASE_URL as string | undefined;
-const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+// Access environment variables using import.meta.env for Vite projects
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
 if (!supabaseUrl || !supabaseAnonKey) {
     console.warn('Supabase credentials not found. Running in offline mode with localStorage.');
@@ -49,11 +49,12 @@ export const generateUuid = (attempts = 0): string => {
             }
         } catch (e) {
             console.error(`[Attempt ${attempts + 1}] Error with crypto.randomUUID, falling back to custom generator:`, e);
-            // Fallback will be attempted in the next block.
+            // This implicitly continues to the fallback block below if an error occurs.
         }
     }
 
     // Fallback UUID generation (v4-like, using Math.random for each segment)
+    // This part is reached if crypto.randomUUID is not available or throws an error.
     let d = new Date().getTime(); // Timestamp
     if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
         d += performance.now(); // Add high-precision timestamp
@@ -297,6 +298,7 @@ export const updateProject = async (id: string, updates: Partial<Project>) => {
 
 export const upsertProject = async (project: Project): Promise<Project | null> => {
     if (!supabase) throw new Error('Supabase not initialized');
+    // Safely destructure user to prevent errors if user is null/undefined
     const { data: { user } = {} } = await supabase.auth.getUser();
     if (!user) throw new Error('User not authenticated');
 
@@ -879,7 +881,7 @@ export const fetchAnnotationsForTasks = async (taskIds: string[]): Promise<Annot
         isRelevant: a.is_relevant || 'na',
         relevantJustification: a.relevant_justification || '',
         isSupported: a.is_supported || 'na',
-        supportedJustification: a.supportedJustification || '',
+        supportedJustification: a.supported_justification || '',
         cultureProxy: a.culture_proxy || '',
         type: a.annotation_type || 'manual',
         subtype: a.subtype,
