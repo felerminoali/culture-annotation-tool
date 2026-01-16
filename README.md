@@ -46,3 +46,5 @@ BEGIN
   INSERT INTO public.users (id, email, name, role)
   VALUES (new_user_id, 'john@company.com', 'John Smith', 'admin');
 END $$;
+
+..
