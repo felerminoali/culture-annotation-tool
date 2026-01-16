@@ -13,7 +13,7 @@ import AdminDashboard from './components/AdminDashboard';
 import { getSmartSuggestions } from './services/geminiService'; // Removed getTextToSpeech as per requirement to replace it with native audio
 import { t, TranslationKey } from './services/i18n';
 import * as supabaseService from './services/supabaseService';
-import { generateUuid, isValidUuid } from './services/supabaseService';
+import { generateUuid, isValidUuid, onAuthStateChange } from './services/supabaseService';
 
 
 const App: React.FC = () => {
@@ -150,7 +150,6 @@ const App: React.FC = () => {
   useEffect(() => {
     const checkUser = async () => {
       if (!supabaseService.supabase) {
-        // In a real app, you might have a more robust offline mode or a clearer error message.
         setError('Supabase is not configured. Please check your environment variables.');
         return;
       }
@@ -167,12 +166,12 @@ const App: React.FC = () => {
     };
     checkUser();
 
-    // Listen for auth changes
-    const { data: authListener } = supabaseService.supabase.auth.onAuthStateChange(
-      (event, session) => {
+    // Listen for auth changes using the new safe wrapper
+    const { data: authListenerData } = onAuthStateChange(
+      async (event, session) => {
         // Only call checkUser for SIGNED_IN or INITIAL_SESSION
         if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-          checkUser();
+          await checkUser();
         } else if (event === 'SIGNED_OUT') {
           // When signed out, directly update state without re-calling handleLogout
           setIsAuthenticated(false);
@@ -195,7 +194,8 @@ const App: React.FC = () => {
     );
 
     return () => {
-      authListener?.subscription.unsubscribe();
+      // Safely unsubscribe if a subscription was actually created
+      authListenerData?.subscription?.unsubscribe();
     };
   }, []); // Run once on mount
 
@@ -600,32 +600,35 @@ const App: React.FC = () => {
 
       // 1. Create or Update Project
       const importedProject = data.project;
-      await supabaseService.upsertProject({
-        id: importedProject.id,
-        title: importedProject.title,
-        description: importedProject.description,
-        guideline: importedProject.guideline,
-        createdAt: importedProject.createdAt
-      });
+      const projectToUpsert: Project = {
+        ...importedProject,
+        id: isValidUuid(importedProject.id) ? importedProject.id : generateUuid(),
+      };
+      if (!isValidUuid(importedProject.id)) {
+        console.warn(`Invalid UUID found for project ID: "${importedProject.id}". Regenerating to "${projectToUpsert.id}".`);
+      }
+
+      await supabaseService.upsertProject(projectToUpsert);
       const updatedProjects = await supabaseService.fetchProjects();
       setProjects(updatedProjects);
 
       // 2. Create or Update Tasks
       for (const t of data.tasks) {
-        await supabaseService.upsertTask({
-          id: t.id,
-          title: t.title,
-          objective: t.objective,
-          description: t.description,
-          projectId: t.projectId,
+        const taskToUpsert: Task = {
+          ...t,
+          id: isValidUuid(t.id) ? t.id : generateUuid(),
           text: t.text || (t.paragraphs && Array.isArray(t.paragraphs) ? t.paragraphs.join('\n\n') : ''),
           images: t.images || [],
           audio: t.audio || [],
-          question: t.question,
+          question: t.question || '',
           category: t.category,
           gender: t.gender,
-          taskType: t.taskType
-        });
+          taskType: t.taskType || 'independent'
+        };
+        if (!isValidUuid(t.id)) {
+          console.warn(`Invalid UUID found for task ID: "${t.id}". Regenerating to "${taskToUpsert.id}".`);
+        }
+        await supabaseService.upsertTask(taskToUpsert);
       }
       const updatedTasks = await supabaseService.fetchTasks();
       setTasks(updatedTasks);
@@ -662,21 +665,13 @@ const App: React.FC = () => {
 
           // Save text annotations
           const incomingAnnos = (tData as any).annotations || [];
-          const validatedIncomingAnnos = incomingAnnos.map((a: Annotation) => ({
-            ...a,
-            id: isValidUuid(a.id) ? a.id : generateUuid() // Validate and regenerate ID if invalid
-          }));
-          await supabaseService.saveAnnotations(taskId, userId, validatedIncomingAnnos, submissionId);
+          await supabaseService.saveAnnotations(taskId, userId, incomingAnnos, submissionId);
 
           // Save image annotations
           const incomingImgAnnos = (tData as any).imageAnnotations || {};
           // Convert incomingImgAnnos (Record<string, any[]>) to a flat array for saveImageAnnotationsFlat
           const flatIncomingImgAnnos: ImageAnnotation[] = Object.entries(incomingImgAnnos).flatMap(([paraIdx, annos]) =>
-            (annos as any[]).map((a: ImageAnnotation) => ({
-              ...a,
-              id: isValidUuid(a.id) ? a.id : generateUuid(), // Validate and regenerate ID if invalid
-              paragraph_index: parseInt(paraIdx)
-            }))
+            (annos as any[]).map(a => ({ ...a, paragraph_index: parseInt(paraIdx) }))
           );
           // Use saveImageAnnotationsFlat which accepts a flat array
           await supabaseService.saveImageAnnotationsFlat(taskId, userId, flatIncomingImgAnnos, submissionId);
