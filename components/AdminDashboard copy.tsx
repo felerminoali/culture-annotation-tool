@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
@@ -595,7 +596,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     onChange={(e) => {
                       if (e.target.files?.[0]) {
                         onImportProject(e.target.files[0]);
-                        e.target.value = ''; // Clear the input
+                        e.target.value = '';
                       }
                     }}
                   />
@@ -792,7 +793,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             className="w-5 h-5 rounded-lg border-slate-300 text-indigo-600 focus:ring-indigo-500"
                           />
                         </td>
-                        <td className="py-6 px-8 max-w-sm">
+                        <td className="py-6 px-8 max-md">
                           <div className="flex items-center space-x-3 mb-1">
                             <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">{task.id}</span>
                           </div>
@@ -1291,15 +1292,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
                 <div>
                   <label className="block text-xs font-black uppercase text-slate-400 mb-2">{t('profile_info', language)}</label>
-                  <div className="rounded-2xl border border-slate-200 overflow-hidden shadow-inner bg-slate-50">
-                    <ReactQuill
-                      theme="snow"
-                      value={taskForm.description}
-                      onChange={val => setTaskForm({ ...taskForm, description: val })}
-                      className="bg-white"
-                      placeholder={t('profile_info', language)}
-                    />
-                  </div>
+                  <textarea className="w-full p-4 h-32 bg-slate-50 rounded-2xl border border-slate-200 font-medium" value={taskForm.description} onChange={e => setTaskForm({ ...taskForm, description: e.target.value })} />
                 </div>
               </div>
               <div className="space-y-6">
@@ -1347,48 +1340,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
             </div>
-            <style>{`
-              .ql-container {
-                border-bottom-left-radius: 1rem;
-                border-bottom-right-radius: 1rem;
-                border: none !important;
-                font-family: inherit;
-                font-size: 0.875rem;
-              }
-              .ql-toolbar {
-                border-top-left-radius: 1rem;
-                border-top-right-radius: 1rem;
-                border: none !important;
-                border-bottom: 1px solid #e2e8f0 !important;
-                background: #f8fafc;
-                padding: 0.75rem !important;
-              }
-              .ql-editor {
-                min-height: 180px;
-                padding: 1.25rem !important;
-                color: #1e293b;
-                line-height: 1.6;
-              }
-              .ql-editor.ql-blank::before {
-                left: 1.25rem !important;
-                font-style: normal;
-                color: #94a3b8;
-                font-weight: 500;
-              }
-              .ql-snow .ql-stroke {
-                stroke: #64748b;
-              }
-              .ql-snow .ql-fill {
-                fill: #64748b;
-              }
-              .ql-snow.ql-toolbar button:hover .ql-stroke,
-              .ql-snow.ql-toolbar button:hover .ql-fill,
-              .ql-snow.ql-toolbar button.ql-active .ql-stroke,
-              .ql-snow.ql-toolbar button.ql-active .ql-fill {
-                stroke: #6366f1;
-                fill: #6366f1;
-              }
-            `}</style>
             <div className="flex gap-4 pt-4 border-t border-slate-100">
               <button onClick={() => setIsTaskModalOpen(false)} className="flex-1 py-4 bg-slate-100 rounded-2xl font-black text-slate-500">{t('cancel', language)}</button>
               <button onClick={saveTask} className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-black">{t('confirm_save', language)}</button>

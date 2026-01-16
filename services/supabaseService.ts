@@ -1,3 +1,4 @@
+
 import { createClient, SupabaseClient, User as SupabaseUser } from '@supabase/supabase-js';
 import { User, Project, Task, Annotation, ImageAnnotation, TaskAssignment, ProjectAssignment, DecisionStatus, UserTaskSubmission } from '../types';
 
@@ -539,7 +540,7 @@ export const saveTaskSubmission = async (
         .single();
 
     if (error) {
-        console.error('Error upserting task submission:', error);
+        console.error('Supabase Error (saveTaskSubmission):', error);
         throw error;
     }
 
@@ -670,12 +671,19 @@ export const saveAnnotations = async (taskId: string, userId: string, annotation
     if (!currentSubmissionId) throw new Error('Failed to get or create submission ID for annotations');
 
     // Delete existing annotations for this submission/task/user to avoid duplicates and handle updates simply
-    await supabase
+    const { error: deleteError } = await supabase
         .from('annotations')
         .delete()
         .eq('submission_id', currentSubmissionId)
         .eq('task_id', taskId)
         .eq('user_id', userId);
+
+    if (deleteError) {
+        console.error('Supabase Error (delete existing annotations):', deleteError);
+        // Continue, as delete might fail if no records exist, or due to RLS,
+        // but we want to attempt insert anyway for new annotations.
+        // For a critical app, you might want more robust error handling here.
+    }
 
     if (annotations.length === 0) return { error: null };
 
@@ -702,13 +710,13 @@ export const saveAnnotations = async (taskId: string, userId: string, annotation
         created_at: new Date(a.timestamp).toISOString(),
     }));
 
-    const { error } = await supabase
+    const { error: insertError } = await supabase
         .from('annotations')
         .insert(annotationsData);
 
-    if (error) {
-        console.error('Error inserting annotations:', error);
-        throw error;
+    if (insertError) {
+        console.error('Supabase Error (insert annotations):', insertError);
+        throw insertError;
     }
     return { error: null };
 };
@@ -842,7 +850,8 @@ export const updateAnnotation = async (id: string, updates: Partial<Annotation>)
     if (updates.cultureProxy !== undefined) payload.culture_proxy = updates.cultureProxy;
     if (updates.issueCategory !== undefined) payload.issue_category = updates.issueCategory;
     if (updates.issueDescription !== undefined) payload.issue_description = updates.issueDescription;
-    payload.created_at = new Date(Date.now()).toISOString(); // Update timestamp
+    // Updated at will be handled by the trigger
+    // payload.created_at = new Date(Date.now()).toISOString(); // Not updated here, only on create
 
     const { error } = await supabase
         .from('annotations')
@@ -850,7 +859,7 @@ export const updateAnnotation = async (id: string, updates: Partial<Annotation>)
         .eq('id', id);
 
     if (error) {
-        console.error('Error updating annotation:', error);
+        console.error('Supabase Error (update annotation):', error);
         throw error;
     }
     return { error: null };
@@ -865,7 +874,7 @@ export const deleteAnnotation = async (id: string) => {
         .eq('id', id);
 
     if (error) {
-        console.error('Error deleting annotation:', error);
+        console.error('Supabase Error (delete annotation):', error);
         throw error;
     }
     return { error: null };
@@ -882,12 +891,16 @@ export const saveImageAnnotations = async (taskId: string, userId: string, image
     if (!currentSubmissionId) throw new Error('Failed to get or create submission ID for image annotations');
 
     // Delete existing image annotations for this submission/task/user
-    await supabase
+    const { error: deleteError } = await supabase
         .from('image_annotations')
         .delete()
         .eq('submission_id', currentSubmissionId)
         .eq('task_id', taskId)
         .eq('user_id', userId);
+
+    if (deleteError) {
+        console.error('Supabase Error (delete existing image annotations):', deleteError);
+    }
 
     const flattenedImageAnnotations = Object.entries(imageAnnotations).flatMap(([paraIdx, annos]) =>
         annos.map(a => ({
@@ -919,13 +932,13 @@ export const saveImageAnnotations = async (taskId: string, userId: string, image
 
     if (flattenedImageAnnotations.length === 0) return { error: null };
 
-    const { error } = await supabase
+    const { error: insertError } = await supabase
         .from('image_annotations')
         .insert(flattenedImageAnnotations);
 
-    if (error) {
-        console.error('Error inserting image annotations:', error);
-        throw error;
+    if (insertError) {
+        console.error('Supabase Error (insert image annotations):', insertError);
+        throw insertError;
     }
     return { error: null };
 };
@@ -938,12 +951,16 @@ export const saveImageAnnotationsFlat = async (taskId: string, userId: string, i
     if (!currentSubmissionId) throw new Error('Failed to get or create submission ID for image annotations');
 
     // Delete existing image annotations for this submission/task/user
-    await supabase
+    const { error: deleteError } = await supabase
         .from('image_annotations')
         .delete()
         .eq('submission_id', currentSubmissionId)
         .eq('task_id', taskId)
         .eq('user_id', userId);
+
+    if (deleteError) {
+        console.error('Supabase Error (delete existing image annotations for import):', deleteError);
+    }
 
     const imageAnnotationsData = imageAnnotations.map(a => ({
         id: a.id,
@@ -973,13 +990,13 @@ export const saveImageAnnotationsFlat = async (taskId: string, userId: string, i
 
     if (imageAnnotationsData.length === 0) return { error: null };
 
-    const { error } = await supabase
+    const { error: insertError } = await supabase
         .from('image_annotations')
         .insert(imageAnnotationsData);
 
-    if (error) {
-        console.error('Error inserting image annotations:', error);
-        throw error;
+    if (insertError) {
+        console.error('Supabase Error (insert image annotations for import):', insertError);
+        throw insertError;
     }
     return { error: null };
 };
@@ -1171,7 +1188,11 @@ export const upsertTaskAssignment = async (taskId: string, assignedToEmail: stri
 
     // If 'all', remove existing explicit assignments for this task
     if (assignedToEmail === 'all') {
-        await supabase.from('task_assignments').delete().eq('task_id', taskId);
+        const {error} = await supabase.from('task_assignments').delete().eq('task_id', taskId);
+        if (error) {
+            console.error('Supabase Error (delete task assignment for "all"):', error);
+            throw error;
+        }
         return { data: null, error: null };
     }
 
@@ -1187,7 +1208,7 @@ export const upsertTaskAssignment = async (taskId: string, assignedToEmail: stri
         .single();
 
     if (error) {
-        console.error('Error upserting task assignment:', error);
+        console.error('Supabase Error (upsert task assignment):', error);
         throw error;
     }
     return { data, error: null };
@@ -1203,7 +1224,7 @@ export const deleteTaskAssignment = async (taskId: string, assignedToEmail: stri
         .eq('assigned_to_email', assignedToEmail);
 
     if (error) {
-        console.error('Error deleting task assignment:', error);
+        console.error('Supabase Error (delete task assignment):', error);
         throw error;
     }
     return { error: null };
