@@ -1663,23 +1663,7 @@ const App: React.FC = () => {
                             }}
                             onEditAnnotation={a => handleEditHighlight({ ...a, start: a.start + para.offset, end: a.end + para.offset })}
                           />
-                           <div className="flex justify-end mt-4">
-                            <button
-                              onClick={getAiSuggestions}
-                              disabled={isAiLoading}
-                              className="px-6 py-2.5 bg-blue-500 text-white rounded-xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-blue-600 transition-all shadow-lg active:scale-95 flex items-center disabled:opacity-50"
-                            >
-                              {isAiLoading ? (
-                                <>
-                                  <i className="fa-solid fa-spinner fa-spin mr-2"></i> {t('ai_predict', language)}...
-                                </>
-                              ) : (
-                                <>
-                                  <i className="fa-solid fa-wand-magic-sparkles mr-2"></i> {t('ai_predict', language)}
-                                </>
-                              )}
-                            </button>
-                          </div>
+
                         </div>
 
                         <div className="lg:sticky lg:top-10">

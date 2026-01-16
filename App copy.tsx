@@ -13,8 +13,7 @@ import AdminDashboard from './components/AdminDashboard';
 import { getSmartSuggestions } from './services/geminiService'; // Removed getTextToSpeech as per requirement to replace it with native audio
 import { t, TranslationKey } from './services/i18n';
 import * as supabaseService from './services/supabaseService';
-import { v4 as uuidv4 } from 'uuid'; // Import uuidv4 for generating unique IDs
-
+import { generateUuid } from './services/supabaseService';
 
 
 const App: React.FC = () => {
@@ -34,6 +33,7 @@ const App: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projectAssignments, setProjectAssignments] = useState<ProjectAssignment[]>([]);
   const [allTaskSubmissions, setAllTaskSubmissions] = useState<UserTaskSubmission[]>([]); // For Admin Dashboard agreement
+  const [submissionUpdateKey, setSubmissionUpdateKey] = useState(0); // Key to force AdminDashboard refresh
 
   // Form State
   const [formData, setFormData] = useState({
@@ -222,6 +222,7 @@ const App: React.FC = () => {
         setAssignments(taskAssignmentsData);
         setGlobalLog(globalAnnotationsData);
         setAllTaskSubmissions(allSubmissionsData);
+        setSubmissionUpdateKey(prev => prev + 1); // Increment key after updating global submissions
 
         const savedLang = localStorage.getItem('annotate_language') as Language;
         if (savedLang) setLanguage(savedLang);
@@ -298,6 +299,7 @@ const App: React.FC = () => {
         // After saving, re-fetch global submissions to update agreement dashboard
         const updatedSubmissions = await supabaseService.fetchAllUserTaskSubmissions();
         setAllTaskSubmissions(updatedSubmissions);
+        setSubmissionUpdateKey(prev => prev + 1); // Increment key after updating global submissions
 
       } catch (error) {
         console.error('Error saving task data:', error);
@@ -592,6 +594,7 @@ const App: React.FC = () => {
 
       if (!data.project || !data.tasks || !data.annotations) {
         alert("Invalid project file format");
+        console.error("Import failed: Invalid project file format", data);
         return;
       }
 
@@ -630,28 +633,32 @@ const App: React.FC = () => {
       // 3. Create or Update Annotations (Ground Truth) and Submissions
       for (const userImport of data.annotations) {
         const { userEmail, userId, completedTaskIds, taskData } = userImport;
-        if (!userEmail || !userId) continue;
+        if (!userEmail || !userId) {
+          console.warn(`Skipping user import due to missing email or ID:`, userImport);
+          continue;
+        }
 
         for (const taskId of completedTaskIds) {
           // Ensure a submission exists and mark it as completed (score 0, na for simplicity on import if not specified)
-          await supabaseService.saveTaskSubmission(taskId, userId, 0, 'na', '');
+          await supabaseService.saveTaskSubmission(taskId, userId, 0, 'na', '', true); // Explicitly mark as completed
         }
 
         for (const [taskId, tData] of Object.entries(taskData)) {
-          const submissionId = await supabaseService.getOrCreateSubmissionId(taskId, userId);
-          if (!submissionId) {
-            console.warn(`Could not get/create submission for task ${taskId} user ${userId}`);
-            continue;
-          }
-
           // Update submission details
           await supabaseService.saveTaskSubmission(
             taskId,
             userId,
             (tData as any).culturalScore || 0,
             (tData as any).languageSimilarity || 'na',
-            (tData as any).languageSimilarityJustification || ''
+            (tData as any).languageSimilarityJustification || '',
+            true // Assume tasks with data are completed
           );
+
+          const submissionId = await supabaseService.getOrCreateSubmissionId(taskId, userId);
+          if (!submissionId) {
+            console.warn(`Could not get/create submission for task ${taskId} user ${userId}. Skipping annotations for this user/task.`);
+            continue;
+          }
 
           // Save text annotations
           const incomingAnnos = (tData as any).annotations || [];
@@ -675,12 +682,15 @@ const App: React.FC = () => {
       ]);
       setGlobalLog(updatedAllAnnotations);
       setAllTaskSubmissions(updatedAllSubmissions);
+      setSubmissionUpdateKey(prev => prev + 1); // Increment key after updating global submissions
 
       if (currentUser) {
         const [userCompletedTasks, userAnnotations, userImageAnnotations, userSubmission] = await Promise.all([
           supabaseService.fetchCompletedTaskIds(currentUser.id!),
-          supabaseService.fetchAnnotations(currentTask?.id || '', currentUser.id!),
-          supabaseService.fetchImageAnnotations(currentTask?.id || '', currentUser.id!),
+          // Only call fetchAnnotations if currentTask and currentTask.id are present
+          currentTask?.id ? supabaseService.fetchAnnotations(currentTask.id, currentUser.id!) : Promise.resolve([]),
+          // Only call fetchImageAnnotations if currentTask and currentTask.id are present
+          currentTask?.id ? supabaseService.fetchImageAnnotations(currentTask.id, currentUser.id!) : Promise.resolve({}),
           currentTask ? supabaseService.fetchTaskSubmission(currentTask.id, currentUser.id!) : Promise.resolve(null)
         ]);
         setCompletedTaskIds(userCompletedTasks);
@@ -695,9 +705,9 @@ const App: React.FC = () => {
 
       alert("Project, Tasks, and Annotations imported successfully!");
 
-    } catch (e) {
-      console.error("Import failed", e);
-      alert("Failed to import project. Check console for details.");
+    } catch (e: any) { // Catch as any to access 'message' property
+      console.error("Import failed:", e);
+      alert(`Failed to import project. Details: ${e.message || e.toString()}`);
     }
   };
 
@@ -787,6 +797,7 @@ const App: React.FC = () => {
     setViewMode('workspace');
     setGlobalLog([]); // Clear global log on logout
     setAllTaskSubmissions([]); // Clear all submissions on logout
+    setSubmissionUpdateKey(0); // Reset key on logout
     setError(''); // Clear any previous errors
   };
 
@@ -922,7 +933,7 @@ const App: React.FC = () => {
       } : a);
     } else if (currentSelection) {
       const newAnnotation: Annotation = {
-        id: uuidv4(), // Use uuidv4 to generate a proper UUID
+        id: generateUuid(), // Use generated UUID
         ...currentSelection,
         comment,
         isImportant,
@@ -970,7 +981,7 @@ const App: React.FC = () => {
       } : a);
     } else if (currentSelection) {
       const newAnnotation: Annotation = {
-        id: uuidv4(), // Use uuidv4 to generate a proper UUID
+        id: generateUuid(), // Use generated UUID
         ...currentSelection,
         comment: '',
         isImportant: false,
@@ -1030,7 +1041,7 @@ const App: React.FC = () => {
       updatedImageAnnos = (imageAnnotations[paraIdxKey] || []).map(a => a.id === editingImageAnno.id ? { ...a, ...data } : a);
     } else if (pendingPin) {
       const newAnno: ImageAnnotation = {
-        id: uuidv4(), // Use uuidv4 to generate a proper UUID for image annotations
+        id: generateUuid(), // Use generated UUID
         x: pendingPin.x,
         y: pendingPin.y,
         width: pendingPin.width,
@@ -1101,6 +1112,7 @@ const App: React.FC = () => {
       // Re-fetch all submissions to update AdminDashboard agreement metrics
       const updatedAllSubmissions = await supabaseService.fetchAllUserTaskSubmissions();
       setAllTaskSubmissions(updatedAllSubmissions);
+      setSubmissionUpdateKey(prev => prev + 1); // Increment key after updating global submissions
 
       setShowResubmitSuccess(true);
       setTimeout(() => {
@@ -1140,6 +1152,7 @@ const App: React.FC = () => {
       ]);
       setGlobalLog(updatedGlobalLog);
       setAllTaskSubmissions(updatedAllSubmissions);
+      setSubmissionUpdateKey(prev => prev + 1); // Increment key after updating global submissions
     } catch (error) {
       console.error('Error deleting submission:', error);
       setError('Failed to delete submission. Please try again.');
@@ -1156,7 +1169,7 @@ const App: React.FC = () => {
         throw new Error("User ID not available for AI suggestions.");
       }
       const newAnnos: Annotation[] = (suggestions || []).map((s: any) => ({
-        id: uuidv4(), // Use uuidv4 for AI-generated suggestions too
+        id: generateUuid(), // Use generated UUID
         start: s.start,
         end: s.end,
         text: s.text,
@@ -1559,6 +1572,7 @@ const App: React.FC = () => {
           {viewMode === 'admin' ? (
             <div className="p-10 max-w-7xl mx-auto">
               <AdminDashboard
+                key={submissionUpdateKey} // Added key here
                 activeTab={adminTab}
                 users={users}
                 allAnnotations={globalLog}
