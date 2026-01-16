@@ -15,20 +15,37 @@ export const supabase: SupabaseClient | null = supabaseUrl && supabaseAnonKey
     : null;
 
 /**
- * Generates a UUID (Universally Unique Identifier).
- * Uses Web Crypto API's `randomUUID` which is widely supported in modern browsers.
+ * Generates a UUID (Universally Unique Identifier) using crypto.randomUUID if available,
+ * otherwise falls back to a custom implementation.
  */
 export const generateUuid = (): string => {
-    // Check if crypto.randomUUID is available (modern browsers)
+    let generatedId: string;
+
+    // Attempt to use Web Crypto API's `randomUUID` for robust and standard UUIDs
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-        return crypto.randomUUID();
+        try {
+            generatedId = crypto.randomUUID();
+            console.log('Generated UUID (crypto.randomUUID):', generatedId);
+            return generatedId;
+        } catch (e) {
+            console.error('Error with crypto.randomUUID, falling back:', e);
+            // Fallback if crypto.randomUUID throws an error
+        }
     }
-    // Fallback for environments where crypto.randomUUID might not be available (less likely for this project)
-    // This fallback is a basic v4 UUID generator, but it's better to rely on native.
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-        const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
+
+    // Fallback UUID generation (v4-like, using Math.random for each segment)
+    // This method is used if crypto.randomUUID is unavailable or throws an error.
+    let d = new Date().getTime(); // Timestamp
+    if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
+        d += performance.now(); // Add high-precision timestamp
+    }
+    generatedId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = (d + Math.random() * 16) % 16 | 0;
+        d = Math.floor(d / 16);
+        return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
     });
+    console.log('Generated UUID (fallback):', generatedId);
+    return generatedId;
 };
 
 // ============================================
@@ -716,6 +733,10 @@ export const saveAnnotations = async (taskId: string, userId: string, annotation
 
     if (insertError) {
         console.error('Supabase Error (insert annotations):', insertError);
+        // Log the problematic data for diagnostics
+        if (insertError.message.includes('invalid input syntax for type uuid')) {
+            console.error('Attempted to insert annotations with invalid UUIDs:', annotationsData);
+        }
         throw insertError;
     }
     return { error: null };
@@ -938,6 +959,10 @@ export const saveImageAnnotations = async (taskId: string, userId: string, image
 
     if (insertError) {
         console.error('Supabase Error (insert image annotations):', insertError);
+        // Log the problematic data for diagnostics
+        if (insertError.message.includes('invalid input syntax for type uuid')) {
+            console.error('Attempted to insert image annotations with invalid UUIDs:', flattenedImageAnnotations);
+        }
         throw insertError;
     }
     return { error: null };
@@ -996,6 +1021,10 @@ export const saveImageAnnotationsFlat = async (taskId: string, userId: string, i
 
     if (insertError) {
         console.error('Supabase Error (insert image annotations for import):', insertError);
+        // Log the problematic data for diagnostics
+        if (insertError.message.includes('invalid input syntax for type uuid')) {
+            console.error('Attempted to insert imported image annotations with invalid UUIDs:', imageAnnotationsData);
+        }
         throw insertError;
     }
     return { error: null };
