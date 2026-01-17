@@ -12,7 +12,7 @@ export const supabase: SupabaseClient | null = supabaseUrl && supabaseAnonKey
             // Ensure session persistence is explicitly enabled (default is localStorage)
             // In private/incognito modes, localStorage is often cleared on refresh or tab close,
             // which can lead to session loss. This is expected browser behavior for privacy.
-            persistSession: true, 
+            persistSession: true,
             autoRefreshToken: true,
             // You can change storage here, e.g., 'sessionStorage' for persistence only within the current tab,
             // but it typically won't circumvent private browser restrictions on persistence.
@@ -33,21 +33,21 @@ if (!supabase) {
 ============================================ */
 
 export const generateUuid = (): string => {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-    const r = Math.random() * 16 | 0;
-    const v = c === 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        return crypto.randomUUID();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
 };
 
 export const isValidUuid = (uuid: string): boolean =>
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(uuid);
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(uuid);
 
 const ensureUuid = (id?: string): string =>
-  id && isValidUuid(id) ? id : generateUuid();
+    id && isValidUuid(id) ? id : generateUuid();
 
 
 // ============================================
@@ -107,7 +107,12 @@ export const getCurrentUser = async (): Promise<User | null> => {
         .eq('id', user.id)
         .single();
 
-    if (!profile) return null;
+    if (!profile) {
+        console.warn('User profile not found in public.users for ID:', user.id);
+        return null;
+    }
+
+    console.log('Current user profile loaded:', profile.email, profile.role);
 
     return {
         id: profile.id,
@@ -128,7 +133,7 @@ export const onAuthStateChange = (callback: (event: string, session: any | null)
         console.warn('Supabase client not initialized, cannot listen for auth changes.');
         // Return a dummy subscription object to prevent errors in App.tsx cleanup
         return {
-            data: { subscription: { unsubscribe: () => {} } },
+            data: { subscription: { unsubscribe: () => { } } },
             error: new Error('Supabase client not initialized')
         };
     }

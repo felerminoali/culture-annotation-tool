@@ -158,39 +158,51 @@ const App: React.FC = () => {
 
   // --- Auth Effect ---
   useEffect(() => {
-    const checkUser = async () => {
-      if (!supabaseService.supabase) {
-        if (isMounted.current) setError('Supabase is not configured. Please check your environment variables.');
-        return;
-      }
+    if (!supabaseService.supabase) {
+      setError('Supabase is not configured. Please check your environment variables.');
+      return;
+    }
 
-      const user = await supabaseService.getCurrentUser();
-      if (!isMounted.current) return; // Check if component is still mounted after async operation
+    const checkUser = async (session: any = null) => {
+      try {
+        const user = session?.user
+          ? await supabaseService.getCurrentUser()
+          : await supabaseService.getCurrentUser();
 
-      if (user) {
-        setCurrentUser(user);
-        setIsAuthenticated(true);
-        setViewMode(user.role === 'admin' ? 'admin' : 'workspace');
-      } else {
-        setIsAuthenticated(false);
-        setCurrentUser(null);
+        if (!isMounted.current) return;
+
+        if (user) {
+          setCurrentUser(user);
+          setIsAuthenticated(true);
+          setViewMode(user.role === 'admin' ? 'admin' : 'workspace');
+          setError('');
+        } else {
+          setIsAuthenticated(false);
+          setCurrentUser(null);
+        }
+      } catch (err) {
+        console.error('Error during checkUser:', err);
+        if (isMounted.current) {
+          setIsAuthenticated(false);
+          setCurrentUser(null);
+        }
       }
     };
-    checkUser();
 
     // Listen for auth changes using the new safe wrapper
     const { data: authListenerData } = onAuthStateChange(
       async (event, session) => {
-        if (!isMounted.current) return; // Check again inside the listener
+        if (!isMounted.current) return;
 
-        // Only call checkUser for SIGNED_IN or INITIAL_SESSION
-        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-          await checkUser();
-        } else if (event === 'SIGNED_OUT') {
-          // When signed out, directly update state without re-calling handleLogout
+        console.log('Auth event:', event, !!session);
+
+        // Handle all events that provide or confirm a session
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION' || event === 'MFA_CHALLENGE') {
+          await checkUser(session);
+        } else if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
+          // When signed out, directly update state
           setIsAuthenticated(false);
           setCurrentUser(null);
-          // Also clear specific user-related data immediately
           setAnnotations([]);
           setImageAnnotations({});
           setCulturalScore(0);
@@ -200,15 +212,15 @@ const App: React.FC = () => {
           setCurrentTaskIndex(0);
           setFormData({ name: '', email: '', password: '', confirmPassword: '', role: 'annotator' });
           setViewMode('workspace');
-          // Global data might still be needed for admin view, so don't clear immediately
-          // setGlobalLog([]);
-          // setAllTaskSubmissions([]);
+          setGlobalLog([]);
+          setAllTaskSubmissions([]);
+          setSubmissionUpdateKey(0);
+          setError('');
         }
       }
     );
 
     return () => {
-      // Safely unsubscribe if a subscription was actually created
       authListenerData?.subscription?.unsubscribe();
     };
   }, []); // Run once on mount
@@ -306,7 +318,7 @@ const App: React.FC = () => {
 
         // Note: completedTaskIds are already set by loadGlobalResources for initial load.
         // This line ensures it's up-to-date for individual task changes too.
-        setCompletedTaskIds(completedIds); 
+        setCompletedTaskIds(completedIds);
         setAnnotations(annotationsData);
         setImageAnnotations(imageAnnotationsData);
 
@@ -1827,7 +1839,7 @@ const App: React.FC = () => {
                             }}
                             onEditAnnotation={a => handleEditHighlight({ ...a, start: a.start + para.offset, end: a.end + para.offset })}
                           />
-                           <div className="flex justify-end mt-4">
+                          <div className="flex justify-end mt-4">
                             <button
                               onClick={getAiSuggestions}
                               disabled={isAiLoading}
