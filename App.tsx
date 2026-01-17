@@ -210,11 +210,7 @@ const App: React.FC = () => {
           setIsAuthenticated(false);
           setCurrentUser(null);
 
-          // Safety Valve: Only run if we are the authoritative check
-          if (userId) {
-            console.warn('App: Orphaned session detected (User ID exists but Profile not found). Forcing sign out.');
-            await supabaseService.signOut();
-          }
+          // Removed Safety Valve to prevent accidental sign-outs during transient errors
         }
       } catch (err) {
         if (currentCheckId !== latestAuthCheckId.current) return; // Ignore errors from stale checks too
@@ -238,18 +234,9 @@ const App: React.FC = () => {
       console.error('LocalStorage is not available:', e);
     }
 
-    // Initial check using getSession for immediate state if possible
-    supabaseService.supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        console.log('App: Initial getSession found user, running checkUser.');
-        checkUser(session.user);
-      } else {
-        console.log('App: Initial getSession found NO user, running checkUser(null).');
-        checkUser(null);
-      }
-    });
-
     // Listen for auth changes
+    // We rely SOLELY on onAuthStateChange for the source of truth.
+    // This handles INITIAL_SESSION, SIGNED_IN, and TOKEN_REFRESHED automatically.
     const { data: authListenerData } = onAuthStateChange(
       async (event, session) => {
         if (!isMounted.current) return;
@@ -285,7 +272,7 @@ const App: React.FC = () => {
     return () => {
       authListenerData?.subscription?.unsubscribe();
     };
-  }, []); // Run once on mount
+  }, []); // Run once on moun
 
   // Sync Global Resources from Supabase
   useEffect(() => {
