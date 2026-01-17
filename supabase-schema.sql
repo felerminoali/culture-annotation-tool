@@ -47,7 +47,7 @@ CREATE TABLE public.task_submissions (
   language_similarity_justification TEXT,
   submitted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  UNIQUE(task_id, user_id)
+  UNIQUE(task_id,   )
 );
 
 -- Text annotations table

@@ -1,34 +1,41 @@
+
+
 import { createClient, SupabaseClient, User as SupabaseUser } from '@supabase/supabase-js';
 import { User, Project, Task, Annotation, ImageAnnotation, TaskAssignment, ProjectAssignment, DecisionStatus, UserTaskSubmission } from '../types';
 
-// Access environment variables using process.env, which is defined by Vite's `define` config
-const supabaseUrl = process.env.VITE_SUPABASE_URL as string | undefined;
-const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY as string | undefined;
-
-if (!supabaseUrl || !supabaseAnonKey) {
-    console.warn('Supabase credentials not found. Running in offline mode with localStorage.');
-}
+// Access environment variables using import.meta.env, which is the standard Vite way
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 export const supabase: SupabaseClient | null = supabaseUrl && supabaseAnonKey
     ? createClient(supabaseUrl, supabaseAnonKey)
     : null;
 
-/**
- * Generates a UUID (Universally Unique Identifier).
- * Uses Web Crypto API's `randomUUID` which is widely supported in modern browsers.
- */
+if (!supabase) {
+    console.warn('Supabase credentials not found. Supabase features will be disabled. Please check your .env file.');
+}
+
+/* ============================================
+   UUID UTILITIES
+============================================ */
+
 export const generateUuid = (): string => {
-    // Check if crypto.randomUUID is available (modern browsers)
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-        return crypto.randomUUID();
-    }
-    // Fallback for environments where crypto.randomUUID might not be available (less likely for this project)
-    // This fallback is a basic v4 UUID generator, but it's better to rely on native.
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-        const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
-    });
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
 };
+
+export const isValidUuid = (uuid: string): boolean =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(uuid);
+
+const ensureUuid = (id?: string): string =>
+  id && isValidUuid(id) ? id : generateUuid();
+
 
 // ============================================
 // AUTHENTICATION
@@ -96,6 +103,23 @@ export const getCurrentUser = async (): Promise<User | null> => {
         role: profile.role,
         password: '' // Not returned from database
     };
+};
+
+/**
+ * Safely sets up an authentication state change listener.
+ * Returns the subscription object or a dummy object if Supabase is not initialized.
+ * The callback type is explicitly defined to avoid runtime errors when `supabase.auth` is not available.
+ */
+export const onAuthStateChange = (callback: (event: string, session: any | null) => void) => {
+    if (!supabase) {
+        console.warn('Supabase client not initialized, cannot listen for auth changes.');
+        // Return a dummy subscription object to prevent errors in App.tsx cleanup
+        return {
+            data: { subscription: { unsubscribe: () => {} } },
+            error: new Error('Supabase client not initialized')
+        };
+    }
+    return supabase.auth.onAuthStateChange(callback);
 };
 
 // ============================================
@@ -339,12 +363,13 @@ export const fetchTasks = async (projectId?: string): Promise<Task[]> => {
     }));
 };
 
-export const createTask = async (task: Omit<Task, 'id'>): Promise<Task | null> => {
+export const createTask = async (task: Task): Promise<Task | null> => { // Changed from Omit<Task, 'id'> to Task
     if (!supabase) throw new Error('Supabase not initialized');
 
     const { data, error } = await supabase
         .from('tasks')
         .insert({
+            id: task.id, // Explicitly include the generated ID
             project_id: task.projectId,
             title: task.title,
             objective: task.objective,
@@ -473,68 +498,29 @@ export const deleteTask = async (id: string) => {
 // TASK SUBMISSIONS
 // ============================================
 
-export const getOrCreateSubmissionId = async (taskId: string, userId: string): Promise<string | null> => {
-    if (!supabase) throw new Error('Supabase not initialized');
-
-    const { data: existingSubmission, error: fetchError } = await supabase
-        .from('task_submissions')
-        .select('id')
-        .eq('task_id', taskId)
-        .eq('user_id', userId)
-        .single();
-
-    if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 is "No rows found"
-        console.error(`Error fetching existing submission for task ${taskId}, user ${userId}:`, fetchError);
-        throw fetchError;
-    }
-
-    if (existingSubmission) {
-        return existingSubmission.id;
-    } else {
-        const { data: newSubmission, error: insertError } = await supabase
-            .from('task_submissions')
-            .insert({
-                task_id: taskId,
-                user_id: userId,
-                cultural_score: 0,
-                language_similarity: 'na',
-                language_similarity_justification: '',
-                completed: false // Default to not completed on initial creation
-            })
-            .select('id')
-            .single();
-
-        if (insertError) {
-            console.error(`Error creating new submission for task ${taskId}, user ${userId}:`, insertError);
-            throw insertError;
-        }
-        return newSubmission?.id || null;
-    }
-};
-
+// Removed getOrCreateSubmissionId as task_id and user_id are now the composite PK
 export const saveTaskSubmission = async (
     taskId: string,
     userId: string,
     culturalScore: number,
     languageSimilarity: DecisionStatus,
     languageSimilarityJustification: string,
-    completed: boolean = false // New parameter to mark as completed
+    completed: boolean = false
 ) => {
     if (!supabase) throw new Error('Supabase not initialized');
 
-    // Get or create the submission record
-    const submissionId = await getOrCreateSubmissionId(taskId, userId);
-    if (!submissionId) throw new Error('Failed to get or create submission ID');
-
     const { data, error } = await supabase
         .from('task_submissions')
-        .update({
+        .upsert({
+            task_id: taskId,
+            user_id: userId,
             cultural_score: culturalScore,
             language_similarity: languageSimilarity,
             language_similarity_justification: languageSimilarityJustification,
-            completed: completed // Set completed status
+            completed: completed
+        }, {
+            onConflict: 'task_id,user_id' // Specify composite primary key for upsert
         })
-        .eq('id', submissionId)
         .select()
         .single();
 
@@ -663,26 +649,23 @@ export const deleteTaskSubmission = async (taskId: string, userId: string) => {
 // ANNOTATIONS
 // ============================================
 
-export const saveAnnotations = async (taskId: string, userId: string, annotations: Annotation[], submissionId?: string) => {
+export const saveAnnotations = async (taskId: string, userId: string, annotations: Annotation[]) => {
     if (!supabase) throw new Error('Supabase not initialized');
-
-    const currentSubmissionId = submissionId || await getOrCreateSubmissionId(taskId, userId);
-    if (!currentSubmissionId) throw new Error('Failed to get or create submission ID for annotations');
 
     // Delete existing annotations for this submission/task/user to avoid duplicates and handle updates simply
     await supabase
         .from('annotations')
         .delete()
-        .eq('submission_id', currentSubmissionId)
-        .eq('task_id', taskId)
-        .eq('user_id', userId);
+        .eq('submission_task_id', taskId)
+        .eq('submission_user_id', userId);
 
     if (annotations.length === 0) return { error: null };
 
     // Insert new annotations
     const annotationsData = annotations.map(a => ({
-        id: a.id, // Keep client-generated ID
-        submission_id: currentSubmissionId,
+        id: ensureUuid(a.id), // Keep client-generated ID
+        submission_task_id: taskId, // Use task_id for submission_task_id
+        submission_user_id: userId, // Use userId for submission_user_id
         task_id: taskId,
         user_id: userId,
         start_pos: a.start,
@@ -719,8 +702,8 @@ export const fetchAnnotations = async (taskId: string, userId: string): Promise<
     const { data, error } = await supabase
         .from('annotations')
         .select('*')
-        .eq('task_id', taskId)
-        .eq('user_id', userId)
+        .eq('submission_task_id', taskId) // Query by submission composite key
+        .eq('submission_user_id', userId) // Query by submission composite key
         .order('created_at', { ascending: true }); // Order for consistent display
 
     if (error) {
@@ -747,7 +730,9 @@ export const fetchAnnotations = async (taskId: string, userId: string): Promise<
         timestamp: new Date(a.created_at).getTime(),
         userEmail: '', // Will be hydrated by client if needed, or fetched with join
         userId: a.user_id,
-        taskId: a.task_id
+        taskId: a.task_id,
+        submissionTaskId: a.submission_task_id,
+        submissionUserId: a.submission_user_id,
     }));
 };
 
@@ -785,7 +770,9 @@ export const fetchAllAnnotations = async (): Promise<Annotation[]> => {
         timestamp: new Date(a.created_at).getTime(),
         userEmail: (a.users as Partial<User> | null)?.email || 'unknown', // Cast to Partial<User> | null
         userId: a.user_id,
-        taskId: a.task_id
+        taskId: a.task_id,
+        submissionTaskId: a.submission_task_id,
+        submissionUserId: a.submission_user_id,
     }));
 };
 
@@ -825,7 +812,9 @@ export const fetchAnnotationsForTasks = async (taskIds: string[]): Promise<Annot
         timestamp: new Date(a.created_at).getTime(),
         userEmail: (a.users as Partial<User> | null)?.email || 'unknown', // Cast to Partial<User> | null
         userId: a.user_id,
-        taskId: a.task_id
+        taskId: a.task_id,
+        submissionTaskId: a.submission_task_id,
+        submissionUserId: a.submission_user_id,
     }));
 };
 
@@ -875,24 +864,21 @@ export const deleteAnnotation = async (id: string) => {
 // IMAGE ANNOTATIONS
 // ============================================
 
-export const saveImageAnnotations = async (taskId: string, userId: string, imageAnnotations: Record<string, ImageAnnotation[]>, submissionId?: string) => {
+export const saveImageAnnotations = async (taskId: string, userId: string, imageAnnotations: Record<string, ImageAnnotation[]>) => {
     if (!supabase) throw new Error('Supabase not initialized');
-
-    const currentSubmissionId = submissionId || await getOrCreateSubmissionId(taskId, userId);
-    if (!currentSubmissionId) throw new Error('Failed to get or create submission ID for image annotations');
 
     // Delete existing image annotations for this submission/task/user
     await supabase
         .from('image_annotations')
         .delete()
-        .eq('submission_id', currentSubmissionId)
-        .eq('task_id', taskId)
-        .eq('user_id', userId);
+        .eq('submission_task_id', taskId)
+        .eq('submission_user_id', userId);
 
     const flattenedImageAnnotations = Object.entries(imageAnnotations).flatMap(([paraIdx, annos]) =>
         annos.map(a => ({
-            id: a.id,
-            submission_id: currentSubmissionId,
+            id: ensureUuid(a.id),
+            submission_task_id: taskId, // Use task_id for submission_task_id
+            submission_user_id: userId, // Use userId for submission_user_id
             task_id: taskId,
             user_id: userId,
             paragraph_index: parseInt(paraIdx),
@@ -931,23 +917,20 @@ export const saveImageAnnotations = async (taskId: string, userId: string, image
 };
 
 // Overload for when importing flat image annotations
-export const saveImageAnnotationsFlat = async (taskId: string, userId: string, imageAnnotations: ImageAnnotation[], submissionId?: string) => {
+export const saveImageAnnotationsFlat = async (taskId: string, userId: string, imageAnnotations: ImageAnnotation[]) => {
     if (!supabase) throw new Error('Supabase not initialized');
-
-    const currentSubmissionId = submissionId || await getOrCreateSubmissionId(taskId, userId);
-    if (!currentSubmissionId) throw new Error('Failed to get or create submission ID for image annotations');
 
     // Delete existing image annotations for this submission/task/user
     await supabase
         .from('image_annotations')
         .delete()
-        .eq('submission_id', currentSubmissionId)
-        .eq('task_id', taskId)
-        .eq('user_id', userId);
+        .eq('submission_task_id', taskId)
+        .eq('submission_user_id', userId);
 
     const imageAnnotationsData = imageAnnotations.map(a => ({
         id: a.id,
-        submission_id: currentSubmissionId,
+        submission_task_id: taskId, // Use task_id for submission_task_id
+        submission_user_id: userId, // Use userId for submission_user_id
         task_id: taskId,
         user_id: userId,
         paragraph_index: a.paragraph_index,
@@ -991,8 +974,8 @@ export const fetchImageAnnotations = async (taskId: string, userId: string): Pro
     const { data, error } = await supabase
         .from('image_annotations')
         .select('*')
-        .eq('task_id', taskId)
-        .eq('user_id', userId)
+        .eq('submission_task_id', taskId) // Query by submission composite key
+        .eq('submission_user_id', userId) // Query by submission composite key
         .order('created_at', { ascending: true });
 
     if (error) {
@@ -1029,6 +1012,8 @@ export const fetchImageAnnotations = async (taskId: string, userId: string): Pro
             userEmail: '', // Will be hydrated by client if needed
             userId: a.user_id,
             taskId: a.task_id,
+            submissionTaskId: a.submission_task_id,
+            submissionUserId: a.submission_user_id,
             paragraph_index: a.paragraph_index // Ensure paragraph_index is mapped
         });
     });
@@ -1076,6 +1061,8 @@ export const fetchImageAnnotationsForTasks = async (taskIds: string[]): Promise<
         userEmail: (a.users as Partial<User> | null)?.email || 'unknown', // Cast to Partial<User> | null
         userId: a.user_id,
         taskId: a.task_id,
+        submissionTaskId: a.submission_task_id,
+        submissionUserId: a.submission_user_id,
         paragraph_index: a.paragraph_index // Ensure paragraph_index is mapped
     }));
 };

@@ -227,6 +227,43 @@ const App: React.FC = () => {
         const savedLang = localStorage.getItem('annotate_language') as Language;
         if (savedLang) setLanguage(savedLang);
 
+        // --- NEW LOGIC TO SET INITIAL CURRENT TASK INDEX TO THE LAST COMPLETED TASK ---
+        if (currentUser) {
+          // Fetch completed task IDs for the current user
+          const userCompletedTaskIds = await supabaseService.fetchCompletedTaskIds(currentUser.id!);
+          setCompletedTaskIds(userCompletedTaskIds); // Update the state
+
+          // Determine visible tasks based on newly fetched data for initial index calculation
+          let currentUsersVisibleTasks: Task[] = [];
+          if (currentUser.role === 'admin') {
+            currentUsersVisibleTasks = tasksData; // Admin sees all tasks initially
+          } else {
+            currentUsersVisibleTasks = tasksData.filter(task => {
+              const assignment = taskAssignmentsData.find(a => a.taskId === task.id);
+              if (assignment) {
+                return assignment.assignedToEmail === 'all' || assignment.assignedToEmail === currentUser.email;
+              }
+              if (task.projectId) {
+                return projectAssignmentsData.some(pa => pa.projectId === task.projectId && pa.assignedToEmail === currentUser.email);
+              }
+              return false;
+            });
+          }
+
+          let lastCompletedIndex = 0;
+          // Find the index of the last completed task within the visible tasks
+          for (let i = currentUsersVisibleTasks.length - 1; i >= 0; i--) {
+            if (userCompletedTaskIds.includes(currentUsersVisibleTasks[i].id)) {
+              lastCompletedIndex = i;
+              break;
+            }
+          }
+          setCurrentTaskIndex(lastCompletedIndex);
+        } else {
+          setCurrentTaskIndex(0); // Default to first task if no user or no completed tasks
+        }
+        // --- END NEW LOGIC ---
+
       } catch (error) {
         console.error('Error loading global resources:', error);
       }
@@ -248,7 +285,9 @@ const App: React.FC = () => {
           supabaseService.fetchTaskSubmission(currentTask.id, currentUser.id!)
         ]);
 
-        setCompletedTaskIds(completedIds);
+        // Note: completedTaskIds are already set by loadGlobalResources for initial load.
+        // This line ensures it's up-to-date for individual task changes too.
+        setCompletedTaskIds(completedIds); 
         setAnnotations(annotationsData);
         setImageAnnotations(imageAnnotationsData);
 
@@ -291,7 +330,8 @@ const App: React.FC = () => {
           currentUser.id!,
           culturalScore,
           languageSimilarity,
-          languageSimilarityJustification
+          languageSimilarityJustification,
+          isTaskSubmitted // Pass the current submission status
         );
         await supabaseService.saveAnnotations(currentTask.id, currentUser.id!, annotations);
         await supabaseService.saveImageAnnotations(currentTask.id, currentUser.id!, imageAnnotations);
@@ -308,7 +348,7 @@ const App: React.FC = () => {
 
     return () => clearTimeout(timer);
   }, [annotations, imageAnnotations, culturalScore, languageSimilarity, languageSimilarityJustification,
-    isAuthenticated, currentUser, currentTask?.id]);
+    isAuthenticated, currentUser, currentTask?.id, isTaskSubmitted]); // Add isTaskSubmitted to dependencies
 
   useEffect(() => {
     localStorage.setItem('annotate_language', language);
@@ -415,7 +455,7 @@ const App: React.FC = () => {
     }
   }, [tasks]);
 
-  const addTask = useCallback(async (task: Omit<Task, 'id'>) => {
+  const addTask = useCallback(async (task: Task) => { // Changed type to Task
     if (!supabaseService.supabase) return;
     try {
       const newTask = await supabaseService.createTask(task);
@@ -657,15 +697,9 @@ const App: React.FC = () => {
             true // Assume tasks with data are completed
           );
 
-          const submissionId = await supabaseService.getOrCreateSubmissionId(taskId, userId);
-          if (!submissionId) {
-            console.warn(`Could not get/create submission for task ${taskId} user ${userId}. Skipping annotations for this user/task.`);
-            continue;
-          }
-
-          // Save text annotations
+          // Save text annotations - pass taskId and userId directly
           const incomingAnnos = (tData as any).annotations || [];
-          await supabaseService.saveAnnotations(taskId, userId, incomingAnnos, submissionId);
+          await supabaseService.saveAnnotations(taskId, userId, incomingAnnos);
 
           // Save image annotations
           const incomingImgAnnos = (tData as any).imageAnnotations || {};
@@ -674,7 +708,7 @@ const App: React.FC = () => {
             (annos as any[]).map(a => ({ ...a, paragraph_index: parseInt(paraIdx) }))
           );
           // Use saveImageAnnotationsFlat which accepts a flat array
-          await supabaseService.saveImageAnnotationsFlat(taskId, userId, flatIncomingImgAnnos, submissionId);
+          await supabaseService.saveImageAnnotationsFlat(taskId, userId, flatIncomingImgAnnos);
         }
       }
 
@@ -950,6 +984,8 @@ const App: React.FC = () => {
         userEmail: currentUser?.email,
         userId: currentUser.id,
         taskId: currentTask.id,
+        submissionTaskId: currentTask.id, // Set submission_task_id
+        submissionUserId: currentUser.id, // Set submission_user_id
         subtype: 'culture'
       };
       updatedAnnos = [...annotations, newAnnotation];
@@ -995,7 +1031,9 @@ const App: React.FC = () => {
         timestamp: Date.now(),
         userEmail: currentUser?.email,
         userId: currentUser.id,
-        taskId: currentTask.id
+        taskId: currentTask.id,
+        submissionTaskId: currentTask.id, // Set submission_task_id
+        submissionUserId: currentUser.id, // Set submission_user_id
       };
       updatedAnnos = [...annotations, newAnnotation];
     } else {
@@ -1032,7 +1070,7 @@ const App: React.FC = () => {
     }
   };
 
-  const saveImageAnnotation = async (data: Omit<ImageAnnotation, 'id' | 'x' | 'y' | 'width' | 'height' | 'timestamp' | 'userId' | 'taskId' | 'userEmail' | 'paragraph_index'>) => {
+  const saveImageAnnotation = async (data: Omit<ImageAnnotation, 'id' | 'x' | 'y' | 'width' | 'height' | 'timestamp' | 'userId' | 'taskId' | 'userEmail' | 'paragraph_index' | 'submissionTaskId' | 'submissionUserId'>) => {
     if (activeImageIdx === null || !currentTask || !currentUser?.id) return;
     const paraIdxKey = activeImageIdx.toString();
     setIsImageModalOpen(false);
@@ -1054,6 +1092,8 @@ const App: React.FC = () => {
         userEmail: currentUser?.email,
         userId: currentUser.id,
         taskId: currentTask.id,
+        submissionTaskId: currentTask.id, // Set submission_task_id
+        submissionUserId: currentUser.id, // Set submission_user_id
         paragraph_index: activeImageIdx,
         // Provide default values for properties that might be omitted when creating an issue annotation
         description: data.description || '',
@@ -1183,6 +1223,8 @@ const App: React.FC = () => {
         userEmail: 'system', // AI annotations are system-generated
         userId: currentUser.id, // Associate with current user for saving
         taskId: currentTask.id,
+        submissionTaskId: currentTask.id, // Set submission_task_id
+        submissionUserId: currentUser.id, // Set submission_user_id
         subtype: 'culture' // Default AI suggestions to culture type
       }));
 
@@ -1556,7 +1598,14 @@ const App: React.FC = () => {
                 </div>
                 <button
                   onClick={nextTask}
-                  disabled={currentTaskIndex === visibleTasks.length - 1}
+                  disabled={
+                    currentTaskIndex === visibleTasks.length - 1 ||
+                    (
+                      currentUser.role !== 'admin' &&
+                      progressPercentage < 100 && ((completedTaskIds.length + 1) - (currentTaskIndex + 1))  <= 0
+                    )
+                  }
+
                   className="w-10 h-10 bg-white border border-slate-100 rounded-xl hover:bg-slate-50 transition-all disabled:opacity-20 flex items-center justify-center text-slate-600"
                 >
                   <i className="fa-solid fa-chevron-right text-sm"></i>

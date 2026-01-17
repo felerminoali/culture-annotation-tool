@@ -13,7 +13,7 @@ import AdminDashboard from './components/AdminDashboard';
 import { getSmartSuggestions } from './services/geminiService'; // Removed getTextToSpeech as per requirement to replace it with native audio
 import { t, TranslationKey } from './services/i18n';
 import * as supabaseService from './services/supabaseService';
-import { generateUuid } from './services/supabaseService';
+import { generateUuid, isValidUuid, onAuthStateChange } from './services/supabaseService';
 
 
 const App: React.FC = () => {
@@ -150,7 +150,6 @@ const App: React.FC = () => {
   useEffect(() => {
     const checkUser = async () => {
       if (!supabaseService.supabase) {
-        // In a real app, you might have a more robust offline mode or a clearer error message.
         setError('Supabase is not configured. Please check your environment variables.');
         return;
       }
@@ -167,12 +166,12 @@ const App: React.FC = () => {
     };
     checkUser();
 
-    // Listen for auth changes
-    const { data: authListener } = supabaseService.supabase.auth.onAuthStateChange(
-      (event, session) => {
+    // Listen for auth changes using the new safe wrapper
+    const { data: authListenerData } = onAuthStateChange(
+      async (event, session) => {
         // Only call checkUser for SIGNED_IN or INITIAL_SESSION
         if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-          checkUser();
+          await checkUser();
         } else if (event === 'SIGNED_OUT') {
           // When signed out, directly update state without re-calling handleLogout
           setIsAuthenticated(false);
@@ -195,7 +194,8 @@ const App: React.FC = () => {
     );
 
     return () => {
-      authListener?.subscription.unsubscribe();
+      // Safely unsubscribe if a subscription was actually created
+      authListenerData?.subscription?.unsubscribe();
     };
   }, []); // Run once on mount
 
@@ -291,7 +291,8 @@ const App: React.FC = () => {
           currentUser.id!,
           culturalScore,
           languageSimilarity,
-          languageSimilarityJustification
+          languageSimilarityJustification,
+          isTaskSubmitted // Pass the current submission status
         );
         await supabaseService.saveAnnotations(currentTask.id, currentUser.id!, annotations);
         await supabaseService.saveImageAnnotations(currentTask.id, currentUser.id!, imageAnnotations);
@@ -308,7 +309,7 @@ const App: React.FC = () => {
 
     return () => clearTimeout(timer);
   }, [annotations, imageAnnotations, culturalScore, languageSimilarity, languageSimilarityJustification,
-    isAuthenticated, currentUser, currentTask?.id]);
+    isAuthenticated, currentUser, currentTask?.id, isTaskSubmitted]); // Add isTaskSubmitted to dependencies
 
   useEffect(() => {
     localStorage.setItem('annotate_language', language);
@@ -415,7 +416,7 @@ const App: React.FC = () => {
     }
   }, [tasks]);
 
-  const addTask = useCallback(async (task: Omit<Task, 'id'>) => {
+  const addTask = useCallback(async (task: Task) => { // Changed type to Task
     if (!supabaseService.supabase) return;
     try {
       const newTask = await supabaseService.createTask(task);
@@ -600,32 +601,35 @@ const App: React.FC = () => {
 
       // 1. Create or Update Project
       const importedProject = data.project;
-      await supabaseService.upsertProject({
-        id: importedProject.id,
-        title: importedProject.title,
-        description: importedProject.description,
-        guideline: importedProject.guideline,
-        createdAt: importedProject.createdAt
-      });
+      const projectToUpsert: Project = {
+        ...importedProject,
+        id: isValidUuid(importedProject.id) ? importedProject.id : generateUuid(),
+      };
+      if (!isValidUuid(importedProject.id)) {
+        console.warn(`Invalid UUID found for project ID: "${importedProject.id}". Regenerating to "${projectToUpsert.id}".`);
+      }
+
+      await supabaseService.upsertProject(projectToUpsert);
       const updatedProjects = await supabaseService.fetchProjects();
       setProjects(updatedProjects);
 
       // 2. Create or Update Tasks
       for (const t of data.tasks) {
-        await supabaseService.upsertTask({
-          id: t.id,
-          title: t.title,
-          objective: t.objective,
-          description: t.description,
-          projectId: t.projectId,
+        const taskToUpsert: Task = {
+          ...t,
+          id: isValidUuid(t.id) ? t.id : generateUuid(),
           text: t.text || (t.paragraphs && Array.isArray(t.paragraphs) ? t.paragraphs.join('\n\n') : ''),
           images: t.images || [],
           audio: t.audio || [],
-          question: t.question,
+          question: t.question || '',
           category: t.category,
           gender: t.gender,
-          taskType: t.taskType
-        });
+          taskType: t.taskType || 'independent'
+        };
+        if (!isValidUuid(t.id)) {
+          console.warn(`Invalid UUID found for task ID: "${t.id}". Regenerating to "${taskToUpsert.id}".`);
+        }
+        await supabaseService.upsertTask(taskToUpsert);
       }
       const updatedTasks = await supabaseService.fetchTasks();
       setTasks(updatedTasks);
@@ -654,15 +658,9 @@ const App: React.FC = () => {
             true // Assume tasks with data are completed
           );
 
-          const submissionId = await supabaseService.getOrCreateSubmissionId(taskId, userId);
-          if (!submissionId) {
-            console.warn(`Could not get/create submission for task ${taskId} user ${userId}. Skipping annotations for this user/task.`);
-            continue;
-          }
-
-          // Save text annotations
+          // Save text annotations - pass taskId and userId directly
           const incomingAnnos = (tData as any).annotations || [];
-          await supabaseService.saveAnnotations(taskId, userId, incomingAnnos, submissionId);
+          await supabaseService.saveAnnotations(taskId, userId, incomingAnnos);
 
           // Save image annotations
           const incomingImgAnnos = (tData as any).imageAnnotations || {};
@@ -671,7 +669,7 @@ const App: React.FC = () => {
             (annos as any[]).map(a => ({ ...a, paragraph_index: parseInt(paraIdx) }))
           );
           // Use saveImageAnnotationsFlat which accepts a flat array
-          await supabaseService.saveImageAnnotationsFlat(taskId, userId, flatIncomingImgAnnos, submissionId);
+          await supabaseService.saveImageAnnotationsFlat(taskId, userId, flatIncomingImgAnnos);
         }
       }
 
@@ -947,6 +945,8 @@ const App: React.FC = () => {
         userEmail: currentUser?.email,
         userId: currentUser.id,
         taskId: currentTask.id,
+        submissionTaskId: currentTask.id, // Set submission_task_id
+        submissionUserId: currentUser.id, // Set submission_user_id
         subtype: 'culture'
       };
       updatedAnnos = [...annotations, newAnnotation];
@@ -992,7 +992,9 @@ const App: React.FC = () => {
         timestamp: Date.now(),
         userEmail: currentUser?.email,
         userId: currentUser.id,
-        taskId: currentTask.id
+        taskId: currentTask.id,
+        submissionTaskId: currentTask.id, // Set submission_task_id
+        submissionUserId: currentUser.id, // Set submission_user_id
       };
       updatedAnnos = [...annotations, newAnnotation];
     } else {
@@ -1029,7 +1031,7 @@ const App: React.FC = () => {
     }
   };
 
-  const saveImageAnnotation = async (data: Omit<ImageAnnotation, 'id' | 'x' | 'y' | 'width' | 'height' | 'timestamp' | 'userId' | 'taskId' | 'userEmail' | 'paragraph_index'>) => {
+  const saveImageAnnotation = async (data: Omit<ImageAnnotation, 'id' | 'x' | 'y' | 'width' | 'height' | 'timestamp' | 'userId' | 'taskId' | 'userEmail' | 'paragraph_index' | 'submissionTaskId' | 'submissionUserId'>) => {
     if (activeImageIdx === null || !currentTask || !currentUser?.id) return;
     const paraIdxKey = activeImageIdx.toString();
     setIsImageModalOpen(false);
@@ -1051,6 +1053,8 @@ const App: React.FC = () => {
         userEmail: currentUser?.email,
         userId: currentUser.id,
         taskId: currentTask.id,
+        submissionTaskId: currentTask.id, // Set submission_task_id
+        submissionUserId: currentUser.id, // Set submission_user_id
         paragraph_index: activeImageIdx,
         // Provide default values for properties that might be omitted when creating an issue annotation
         description: data.description || '',
@@ -1180,6 +1184,8 @@ const App: React.FC = () => {
         userEmail: 'system', // AI annotations are system-generated
         userId: currentUser.id, // Associate with current user for saving
         taskId: currentTask.id,
+        submissionTaskId: currentTask.id, // Set submission_task_id
+        submissionUserId: currentUser.id, // Set submission_user_id
         subtype: 'culture' // Default AI suggestions to culture type
       }));
 
@@ -1250,16 +1256,17 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 overflow-hidden">
-      {/* GLOBAL FLOATING CHARACTER BUTTON - INFORMATION ICON */}
-      <button
-        onClick={() => setIsProfileModalOpen(true)}
-        className="fixed bottom-8 right-8 w-16 h-16 bg-indigo-600 text-white rounded-full shadow-[0_20px_50px_-10px_rgba(79,70,229,0.5)] z-[9999] flex items-center justify-center hover:scale-110 hover:bg-indigo-700 active:scale-95 transition-all group"
-        title="Researcher Profile"
-      >
-        <i className="fa-solid fa-info-circle text-2xl group-hover:rotate-12 transition-transform"></i>
-      </button>
+      {/* GLOBAL FLOATING CHARACTER BUTTON - INFORMATION ICON (Only visible in workspace mode) */}
+      {viewMode === 'workspace' && (
+        <button
+          onClick={() => setIsProfileModalOpen(true)}
+          className="fixed bottom-8 right-8 w-16 h-16 bg-indigo-600 text-white rounded-full shadow-[0_20px_50px_-10px_rgba(79,70,229,0.5)] z-[9999] flex items-center justify-center hover:scale-110 hover:bg-indigo-700 active:scale-95 transition-all group"
+          title="Researcher Profile"
+        >
+          <i className="fa-solid fa-info-circle text-2xl group-hover:rotate-12 transition-transform"></i>
+        </button>
+      )}
 
-      {/* SIDEBAR */}
       {/* SIDEBAR */}
       <aside className={`w-full ${isSidebarCollapsed ? 'md:w-20' : 'md:w-80'} bg-white border-r border-gray-200 flex flex-col shrink-0 overflow-hidden shadow-sm z-20 transition-all duration-300 ease-in-out`}>
         <div className={`p-6 border-b border-gray-100 bg-slate-50/30 flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
@@ -1552,7 +1559,14 @@ const App: React.FC = () => {
                 </div>
                 <button
                   onClick={nextTask}
-                  disabled={currentTaskIndex === visibleTasks.length - 1}
+                  disabled={
+                    currentTaskIndex === visibleTasks.length - 1 ||
+                    (
+                      currentUser.role !== 'admin' &&
+                      progressPercentage < 100 && completedTaskIds.length + 1 < currentTaskIndex + 1
+                    )
+                  }
+
                   className="w-10 h-10 bg-white border border-slate-100 rounded-xl hover:bg-slate-50 transition-all disabled:opacity-20 flex items-center justify-center text-slate-600"
                 >
                   <i className="fa-solid fa-chevron-right text-sm"></i>
@@ -1663,7 +1677,23 @@ const App: React.FC = () => {
                             }}
                             onEditAnnotation={a => handleEditHighlight({ ...a, start: a.start + para.offset, end: a.end + para.offset })}
                           />
-
+                           <div className="flex justify-end mt-4">
+                            <button
+                              onClick={getAiSuggestions}
+                              disabled={isAiLoading}
+                              className="px-6 py-2.5 bg-blue-500 text-white rounded-xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-blue-600 transition-all shadow-lg active:scale-95 flex items-center disabled:opacity-50"
+                            >
+                              {isAiLoading ? (
+                                <>
+                                  <i className="fa-solid fa-spinner fa-spin mr-2"></i> {t('ai_predict', language)}...
+                                </>
+                              ) : (
+                                <>
+                                  <i className="fa-solid fa-wand-magic-sparkles mr-2"></i> {t('ai_predict', language)}
+                                </>
+                              )}
+                            </button>
+                          </div>
                         </div>
 
                         <div className="lg:sticky lg:top-10">

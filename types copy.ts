@@ -28,8 +28,6 @@ export interface Annotation {
   userEmail?: string; // Track who made it
   userId?: string; // Supabase user ID
   taskId?: string;
-  submissionTaskId?: string; // New: References task_submissions composite key
-  submissionUserId?: string; // New: References task_submissions composite key
   isRelevant?: DecisionStatus;
   relevantJustification?: string;
   isSupported?: DecisionStatus;
@@ -71,8 +69,6 @@ export interface ImageAnnotation {
   userEmail?: string;
   userId?: string; // Supabase user ID
   taskId?: string;
-  submissionTaskId?: string; // New: References task_submissions composite key
-  submissionUserId?: string; // New: References task_submissions composite key
   paragraph_index?: number; // Add paragraph_index to ImageAnnotation
 }
 

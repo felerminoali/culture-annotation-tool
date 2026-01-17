@@ -205,6 +205,8 @@ export const translations = {
         ground_truth_logs: 'Ground Truth Logs',
 
         // Task Modal
+        title: "Title", // New generic title for tasks
+        objective: "Objective", // New objective key for tasks
         question_label: "Question",
         gender_label: "Persona Gender",
         category: "Category",
@@ -214,6 +216,11 @@ export const translations = {
         audio_urls: "Audio (URLs)",
         edit_task: "Edit Task",
         new_task: "New Task",
+        add_paragraph: "Add Paragraph",
+        remove_paragraph: "Remove Paragraph",
+        add_image: "Add Image",
+        add_audio: "Add Audio",
+
 
         // Guidelines Modal
         annotation_guidelines: 'Annotation Guidelines',
@@ -442,6 +449,8 @@ export const translations = {
         ground_truth_logs: 'Logs da Verdade Absoluta',
 
         // Task Modal
+        title: "Título", // New generic title for tasks
+        objective: "Objetivo", // New objective key for tasks
         question_label: "Pergunta",
         gender_label: "Gênero do Personagem",
         category: "Categoria",
@@ -451,6 +460,10 @@ export const translations = {
         audio_urls: "Áudio (URLs)",
         edit_task: "Editar Tarefa",
         new_task: "Nova Tarefa",
+        add_paragraph: "Adicionar Parágrafo",
+        remove_paragraph: "Remover Parágrafo",
+        add_image: "Adicionar Imagem",
+        add_audio: "Adicionar Áudio",
 
         // Guidelines Modal
         annotation_guidelines: 'Diretrizes de Anotação',

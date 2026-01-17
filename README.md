@@ -48,3 +48,14 @@ BEGIN
 END $$;
 
 ..
+
+
+
+psql -h db.prxquaevkggpwryikieg.supabase.co -p 5432 -d postgres -U postgres
+
+pg_dump \
+  --schema-only \
+  --host=db.prxquaevkggpwryikieg.supabase.co \
+  --username=postgres \
+  --dbname=postgres \
+  > schema.sql
