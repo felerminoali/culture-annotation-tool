@@ -147,58 +147,58 @@ const App: React.FC = () => {
   }, [imageAnnotations]);
 
   // --- REPLACED AUTH EFFECT IN APP.TSX ---
-useEffect(() => {
-  const checkUser = async () => {
-    if (!supabaseService.supabase) {
-      setError('Supabase is not configured. Please check your environment variables.');
-      return;
-    }
-
-    try {
-      const user = await supabaseService.getCurrentUser();
-      if (!isMounted.current) return;
-
-      if (user) {
-        setCurrentUser(user);
-        setIsAuthenticated(true);
-        setViewMode(user.role === 'admin' ? 'admin' : 'workspace');
-        setError('');
-      } else {
-        setIsAuthenticated(false);
-        setCurrentUser(null);
+  useEffect(() => {
+    const checkUser = async () => {
+      if (!supabaseService.supabase) {
+        setError('Supabase is not configured. Please check your environment variables.');
+        return;
       }
-    } catch (err) {
-      console.error('Error during checkUser:', err);
-    }
-  };
 
-  // Initial check on mount
-  checkUser();
+      try {
+        const user = await supabaseService.getCurrentUser();
+        if (!isMounted.current) return;
 
-  // Use the standard listener directly (as in File Two) to avoid wrapper bugs
-  const { data: authListener } = supabaseService.supabase.auth.onAuthStateChange(
-    async (event, session) => {
-      if (!isMounted.current) return;
-
-      // Logic from version that handles sessions correctly
-      if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') {
-        checkUser();
-      } else if (event === 'SIGNED_OUT') {
-        setIsAuthenticated(false);
-        setCurrentUser(null);
-        setAnnotations([]);
-        setImageAnnotations({});
-        setCompletedTaskIds([]);
-        setCurrentTaskIndex(0);
-        setFormData({ name: '', email: '', password: '', confirmPassword: '', role: 'annotator' });
+        if (user) {
+          setCurrentUser(user);
+          setIsAuthenticated(true);
+          setViewMode(user.role === 'admin' ? 'admin' : 'workspace');
+          setError('');
+        } else {
+          setIsAuthenticated(false);
+          setCurrentUser(null);
+        }
+      } catch (err) {
+        console.error('Error during checkUser:', err);
       }
-    }
-  );
+    };
 
-  return () => {
-    authListener?.subscription.unsubscribe();
-  };
-}, []);
+    // Initial check on mount
+    checkUser();
+
+    // Use the standard listener directly (as in File Two) to avoid wrapper bugs
+    const { data: authListener } = supabaseService.supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (!isMounted.current) return;
+
+        // Logic from version that handles sessions correctly
+        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') {
+          checkUser();
+        } else if (event === 'SIGNED_OUT') {
+          setIsAuthenticated(false);
+          setCurrentUser(null);
+          setAnnotations([]);
+          setImageAnnotations({});
+          setCompletedTaskIds([]);
+          setCurrentTaskIndex(0);
+          setFormData({ name: '', email: '', password: '', confirmPassword: '', role: 'annotator' });
+        }
+      }
+    );
+
+    return () => {
+      authListener?.subscription.unsubscribe();
+    };
+  }, []);
 
   // Sync Global Resources from Supabase
   useEffect(() => {
