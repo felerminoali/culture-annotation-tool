@@ -1,5 +1,4 @@
 
-
 import { createClient, SupabaseClient, User as SupabaseUser } from '@supabase/supabase-js';
 import { User, Project, Task, Annotation, ImageAnnotation, TaskAssignment, ProjectAssignment, DecisionStatus, UserTaskSubmission } from '../types';
 
@@ -8,7 +7,21 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 export const supabase: SupabaseClient | null = supabaseUrl && supabaseAnonKey
-    ? createClient(supabaseUrl, supabaseAnonKey)
+    ? createClient(supabaseUrl, supabaseAnonKey, {
+        auth: {
+            // Ensure session persistence is explicitly enabled (default is localStorage)
+            // In private/incognito modes, localStorage is often cleared on refresh or tab close,
+            // which can lead to session loss. This is expected browser behavior for privacy.
+            persistSession: true, 
+            autoRefreshToken: true,
+            // You can change storage here, e.g., 'sessionStorage' for persistence only within the current tab,
+            // but it typically won't circumvent private browser restrictions on persistence.
+            // storage: localStorage, // default
+            // storage: sessionStorage,
+        },
+        // Removed `debug: true` as it is not a valid property under the `global` configuration.
+        // If debug logging is desired, consult Supabase-js documentation for the correct method.
+    })
     : null;
 
 if (!supabase) {
