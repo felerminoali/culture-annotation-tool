@@ -101,44 +101,30 @@ export const fetchProfile = async (userId: string): Promise<User | null> => {
     }
 
     console.log('Fetching profile for user ID:', userId);
+    const { data: profile, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single();
 
-    // Retry logic: Attempt up to 3 times to fetch the profile
-    const MAX_RETRIES = 3;
-    let lastError = null;
-
-    for (let i = 0; i < MAX_RETRIES; i++) {
-        const { data: profile, error } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', userId)
-            .single();
-
-        if (!error && profile) {
-            console.log('Profile fetched successfully:', profile.email);
-            return {
-                id: profile.id,
-                email: profile.email,
-                name: profile.name,
-                role: profile.role,
-                password: ''
-            };
-        }
-
-        if (error) {
-            console.warn(`Attempt ${i + 1}/${MAX_RETRIES} failed to fetch profile:`, error.message);
-            lastError = error;
-        } else {
-            console.warn(`Attempt ${i + 1}/${MAX_RETRIES} returned no profile data.`);
-        }
-
-        // Wait before retrying (exponential backoff: 500ms, 1000ms, 1500ms)
-        if (i < MAX_RETRIES - 1) {
-            await new Promise(resolve => setTimeout(resolve, 500 * (i + 1)));
-        }
+    if (error) {
+        console.error('Error fetching profile from DB:', error.message, error.code);
+        return null;
     }
 
-    console.error('All attempts to fetch profile failed. Last error:', lastError?.message);
-    return null;
+    if (!profile) {
+        console.warn('No profile data returned for user ID:', userId);
+        return null;
+    }
+
+    console.log('Profile fetched successfully:', profile.email);
+    return {
+        id: profile.id,
+        email: profile.email,
+        name: profile.name,
+        role: profile.role,
+        password: ''
+    };
 };
 
 export const getCurrentUserRaw = async (): Promise<SupabaseUser | null> => {
