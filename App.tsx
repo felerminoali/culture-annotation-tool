@@ -19,6 +19,7 @@ import { generateUuid, isValidUuid, onAuthStateChange } from './services/supabas
 const App: React.FC = () => {
   // Auth & Navigation State
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isRegistering, setIsRegistering] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [viewMode, setViewMode] = useState<'workspace' | 'admin'>('workspace');
@@ -156,115 +157,53 @@ const App: React.FC = () => {
     );
   }, [imageAnnotations]);
 
-  // Ref to track the latest auth check to prevent race conditions
-  const latestAuthCheckId = useRef(0);
-
   // --- Auth Effect ---
   useEffect(() => {
-    if (!supabaseService.supabase) {
-      setError('Supabase is not configured. Please check your environment variables.');
-      return;
-    }
-
-    const checkUser = async (userFromSession: any = null) => {
-      // Increment check ID and capture it
-      const currentCheckId = ++latestAuthCheckId.current;
-      console.log(`App: checkUser started (ID: ${currentCheckId}). userFromSession present:`, !!userFromSession);
-
-      try {
-        let profile: User | null = null;
-        let userId = userFromSession?.id;
-
-        if (userFromSession) {
-          console.log(`App: Using user from session to fetch profile (ID: ${currentCheckId}):`, userId);
-          profile = await supabaseService.fetchProfile(userId);
-        } else {
-          console.log(`App: No user from session, calling getCurrentUser() (ID: ${currentCheckId})...`);
-          // Use exported raw function to get ID if needed
-          const currentUserResult = await supabaseService.getCurrentUserRaw();
-          if (currentUserResult) {
-            userId = currentUserResult.id;
-            console.log(`App: getCurrentUserRaw returned user (ID: ${currentCheckId}):`, userId);
-            profile = await supabaseService.fetchProfile(userId);
-          }
-        }
-
-        // RACE CONDITION CHECK:
-        // If a newer check has started since we began, ignore this result.
-        if (currentCheckId !== latestAuthCheckId.current) {
-          console.warn(`App: Check ${currentCheckId} is stale (latest is ${latestAuthCheckId.current}). Ignoring result.`);
-          return;
-        }
-
-        if (!isMounted.current) return;
-
-        console.log(`App: Profile fetch result (ID: ${currentCheckId}):`, profile ? 'SUCCESS' : 'FAILURE');
-
-        if (profile) {
-          setCurrentUser(profile);
-          setIsAuthenticated(true);
-          setViewMode(profile.role === 'admin' ? 'admin' : 'workspace');
-          setError('');
-        } else {
-          console.log(`App: Setting authenticated to FALSE (ID: ${currentCheckId})`);
-          setIsAuthenticated(false);
-          setCurrentUser(null);
-
-          // Safety Valve: Only run if we are the authoritative check
-          if (userId) {
-            console.warn('App: Orphaned session detected (User ID exists but Profile not found). Forcing sign out.');
-            await supabaseService.signOut();
-          }
-        }
-      } catch (err) {
-        if (currentCheckId !== latestAuthCheckId.current) return; // Ignore errors from stale checks too
-
-        console.error(`App: Error during checkUser (ID: ${currentCheckId}):`, err);
-        if (isMounted.current) {
-          setIsAuthenticated(false);
-          setCurrentUser(null);
-        }
+    const checkUser = async () => {
+      // Logic from your working snippet: Always fetch fresh user from Supabase
+      if (!supabaseService.supabase) {
+        setError('Supabase is not configured. Please check your environment variables.');
+        if (isMounted.current) setIsLoading(false);
+        return;
       }
-    };
 
-    // Debug LocalStorage availability
-    try {
-      const testKey = 'supabase.test-persistence';
-      localStorage.setItem(testKey, 'working');
-      const retrieved = localStorage.getItem(testKey);
-      localStorage.removeItem(testKey);
-      console.log('LocalStorage Check:', retrieved === 'working' ? 'OK' : 'FAILED');
-    } catch (e) {
-      console.error('LocalStorage is not available:', e);
-    }
+      console.log('App: checkUser called (fetching fresh user)');
+      const user = await supabaseService.getCurrentUser();
 
-    // Initial check using getSession for immediate state if possible
-    supabaseService.supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        console.log('App: Initial getSession found user, running checkUser.');
-        checkUser(session.user);
+      if (!isMounted.current) return;
+
+      if (user) {
+        console.log('App: User found and validated:', user.email);
+        setCurrentUser(user);
+        setIsAuthenticated(true);
+        setViewMode(user.role === 'admin' ? 'admin' : 'workspace');
+        setError('');
       } else {
-        console.log('App: Initial getSession found NO user, running checkUser(null).');
-        checkUser(null);
+        console.log('App: No user found. Logging out local state.');
+        setIsAuthenticated(false);
+        setCurrentUser(null);
       }
-    });
+      setIsLoading(false);
+    };
+    checkUser();
 
     // Listen for auth changes
-    const { data: authListenerData } = onAuthStateChange(
+    const { data: authListenerData } = supabaseService.supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (!isMounted.current) return;
+        console.log('App: Auth event:', event);
 
-        console.log('App: Auth event:', event, 'Session present:', !!session);
-
-        // Handle all events that provide or confirm a session
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION' || event === 'MFA_CHALLENGE') {
-          await checkUser(session?.user);
-        } else if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
-          // Increment ID to invalidate any pending login checks
-          latestAuthCheckId.current++;
-
+        // Match the logic of your working code:
+        // Only trigger checkUser for definitive session events.
+        // Identify specifically if we are signing in or initializing.
+        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+          await checkUser();
+        } else if (event === 'SIGNED_OUT') {
+          // Explicit cleanup
           setIsAuthenticated(false);
           setCurrentUser(null);
+          setIsLoading(false);
+          // ... other state resets
           setAnnotations([]);
           setImageAnnotations({});
           setCulturalScore(0);
@@ -274,16 +213,15 @@ const App: React.FC = () => {
           setCurrentTaskIndex(0);
           setFormData({ name: '', email: '', password: '', confirmPassword: '', role: 'annotator' });
           setViewMode('workspace');
-          setGlobalLog([]);
-          setAllTaskSubmissions([]);
-          setSubmissionUpdateKey(0);
-          setError('');
+          // Global data might still be needed for admin view, so don't clear immediately
+          // setGlobalLog([]);
+          // setAllTaskSubmissions([]);
         }
       }
     );
 
     return () => {
-      authListenerData?.subscription?.unsubscribe();
+      authListenerData.subscription.unsubscribe();
     };
   }, []); // Run once on mount
 
@@ -1427,6 +1365,14 @@ const App: React.FC = () => {
       if (isMounted.current) setIsAiLoading(false);
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return (
