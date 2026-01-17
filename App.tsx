@@ -19,7 +19,6 @@ import { generateUuid, isValidUuid, onAuthStateChange } from './services/supabas
 const App: React.FC = () => {
   // Auth & Navigation State
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   const [isRegistering, setIsRegistering] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [viewMode, setViewMode] = useState<'workspace' | 'admin'>('workspace');
@@ -159,51 +158,96 @@ const App: React.FC = () => {
 
   // --- Auth Effect ---
   useEffect(() => {
-    const checkUser = async () => {
-      // Logic from your working snippet: Always fetch fresh user from Supabase
-      if (!supabaseService.supabase) {
-        setError('Supabase is not configured. Please check your environment variables.');
-        if (isMounted.current) setIsLoading(false);
-        return;
-      }
+    if (!supabaseService.supabase) {
+      setError('Supabase is not configured. Please check your environment variables.');
+      return;
+    }
 
-      console.log('App: checkUser called (fetching fresh user)');
-      const user = await supabaseService.getCurrentUser();
+    const checkUser = async (userFromSession: any = null) => {
+      try {
+        console.log('App: checkUser started. userFromSession present:', !!userFromSession);
 
-      if (!isMounted.current) return;
+        let profile: User | null = null;
+        let userId = userFromSession?.id;
 
-      if (user) {
-        console.log('App: User found and validated:', user.email);
-        setCurrentUser(user);
-        setIsAuthenticated(true);
-        setViewMode(user.role === 'admin' ? 'admin' : 'workspace');
-        setError('');
-      } else {
-        console.log('App: No user found. Logging out local state.');
-        setIsAuthenticated(false);
-        setCurrentUser(null);
-      }
-      setIsLoading(false);
-    };
-    checkUser();
+        if (userFromSession) {
+          console.log('App: Using user from session to fetch profile:', userId);
+          profile = await supabaseService.fetchProfile(userId);
+        } else {
+          console.log('App: No user from session, calling getCurrentUser()...');
+          const currentUserResult = await supabaseService.getCurrentUserRaw(); // Use Raw to get ID for cleanup
+          if (currentUserResult) {
+            userId = currentUserResult.id;
+            console.log('App: getCurrentUserRaw returned user:', userId);
+            profile = await supabaseService.fetchProfile(userId);
+          }
+        }
 
-    // Listen for auth changes
-    const { data: authListenerData } = supabaseService.supabase.auth.onAuthStateChange(
-      async (event, session) => {
+        console.log('App: Profile fetch result:', profile ? 'SUCCESS' : 'FAILURE');
+
         if (!isMounted.current) return;
-        console.log('App: Auth event:', event);
 
-        // Match the logic of your working code:
-        // Only trigger checkUser for definitive session events.
-        // Identify specifically if we are signing in or initializing.
-        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-          await checkUser();
-        } else if (event === 'SIGNED_OUT') {
-          // Explicit cleanup
+        if (profile) {
+          setCurrentUser(profile);
+          setIsAuthenticated(true);
+          setViewMode(profile.role === 'admin' ? 'admin' : 'workspace');
+          setError('');
+        } else {
+          console.log('App: Setting authenticated to FALSE');
           setIsAuthenticated(false);
           setCurrentUser(null);
-          setIsLoading(false);
-          // ... other state resets
+
+          // Safety Valve: If we have a user ID (session exists) but NO profile, force sign out.
+          // This fixes the "Normal Browser" loop where a user is stuck with a valid token but invalid profile.
+          if (userId) {
+            console.warn('App: Orphaned session detected (User ID exists but Profile not found). Forcing sign out.');
+            await supabaseService.signOut();
+          }
+        }
+      } catch (err) {
+        console.error('App: Error during checkUser:', err);
+        if (isMounted.current) {
+          setIsAuthenticated(false);
+          setCurrentUser(null);
+        }
+      }
+    };
+
+    // Debug LocalStorage availability
+    try {
+      const testKey = 'supabase.test-persistence';
+      localStorage.setItem(testKey, 'working');
+      const retrieved = localStorage.getItem(testKey);
+      localStorage.removeItem(testKey);
+      console.log('LocalStorage Check:', retrieved === 'working' ? 'OK' : 'FAILED');
+
+      // Log keys that look like Supabase tokens
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('sb-')) {
+          console.log('Supabase Token found in LocalStorage:', key);
+        }
+      });
+    } catch (e) {
+      console.error('LocalStorage is not available or restricted:', e);
+    }
+
+    // Initial check (non-blocking)
+    checkUser();
+
+    // Listen for auth changes using the new safe wrapper
+    const { data: authListenerData } = onAuthStateChange(
+      async (event, session) => {
+        if (!isMounted.current) return;
+
+        console.log('App: Auth event:', event, 'Session present:', !!session);
+
+        // Handle all events that provide or confirm a session
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION' || event === 'MFA_CHALLENGE') {
+          await checkUser(session?.user);
+        } else if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
+          // When signed out, directly update state
+          setIsAuthenticated(false);
+          setCurrentUser(null);
           setAnnotations([]);
           setImageAnnotations({});
           setCulturalScore(0);
@@ -213,15 +257,16 @@ const App: React.FC = () => {
           setCurrentTaskIndex(0);
           setFormData({ name: '', email: '', password: '', confirmPassword: '', role: 'annotator' });
           setViewMode('workspace');
-          // Global data might still be needed for admin view, so don't clear immediately
-          // setGlobalLog([]);
-          // setAllTaskSubmissions([]);
+          setGlobalLog([]);
+          setAllTaskSubmissions([]);
+          setSubmissionUpdateKey(0);
+          setError('');
         }
       }
     );
 
     return () => {
-      authListenerData.subscription.unsubscribe();
+      authListenerData?.subscription?.unsubscribe();
     };
   }, []); // Run once on mount
 
@@ -1365,14 +1410,6 @@ const App: React.FC = () => {
       if (isMounted.current) setIsAiLoading(false);
     }
   };
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-      </div>
-    );
-  }
 
   if (!isAuthenticated) {
     return (
