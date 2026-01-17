@@ -163,25 +163,36 @@ const App: React.FC = () => {
       return;
     }
 
-    const checkUser = async (session: any = null) => {
+    const checkUser = async (userFromSession: any = null) => {
       try {
-        const user = session?.user
-          ? await supabaseService.getCurrentUser()
-          : await supabaseService.getCurrentUser();
+        console.log('App: checkUser started. userFromSession present:', !!userFromSession);
+
+        let profile: User | null = null;
+
+        if (userFromSession) {
+          console.log('App: Using user from session to fetch profile:', userFromSession.id);
+          profile = await supabaseService.fetchProfile(userFromSession.id);
+        } else {
+          console.log('App: No user from session, calling getCurrentUser()...');
+          profile = await supabaseService.getCurrentUser();
+        }
+
+        console.log('App: Profile fetch result:', profile ? 'SUCCESS' : 'FAILURE');
 
         if (!isMounted.current) return;
 
-        if (user) {
-          setCurrentUser(user);
+        if (profile) {
+          setCurrentUser(profile);
           setIsAuthenticated(true);
-          setViewMode(user.role === 'admin' ? 'admin' : 'workspace');
+          setViewMode(profile.role === 'admin' ? 'admin' : 'workspace');
           setError('');
         } else {
+          console.log('App: Setting authenticated to FALSE');
           setIsAuthenticated(false);
           setCurrentUser(null);
         }
       } catch (err) {
-        console.error('Error during checkUser:', err);
+        console.error('App: Error during checkUser:', err);
         if (isMounted.current) {
           setIsAuthenticated(false);
           setCurrentUser(null);
@@ -189,16 +200,19 @@ const App: React.FC = () => {
       }
     };
 
+    // Initial check (non-blocking)
+    checkUser();
+
     // Listen for auth changes using the new safe wrapper
     const { data: authListenerData } = onAuthStateChange(
       async (event, session) => {
         if (!isMounted.current) return;
 
-        console.log('Auth event:', event, !!session);
+        console.log('App: Auth event:', event, 'Session present:', !!session);
 
         // Handle all events that provide or confirm a session
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION' || event === 'MFA_CHALLENGE') {
-          await checkUser(session);
+          await checkUser(session?.user);
         } else if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
           // When signed out, directly update state
           setIsAuthenticated(false);
