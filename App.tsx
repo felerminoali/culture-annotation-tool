@@ -80,6 +80,16 @@ const App: React.FC = () => {
   const audioContextRef = useRef<AudioContext | null>(null); // Still keeping ref but not actively using for TTS.
   const currentSourceRef = useRef<AudioBufferSourceNode | null>(null); // Still keeping ref but not actively using for TTS.
 
+  // Ref to track if the component is mounted to prevent state updates on unmounted components
+  const isMounted = useRef(false);
+
+  useEffect(() => {
+    isMounted.current = true;
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
+
 
   // Filter TASKS based on assignment if not admin
   const visibleTasks = useMemo(() => {
@@ -150,11 +160,13 @@ const App: React.FC = () => {
   useEffect(() => {
     const checkUser = async () => {
       if (!supabaseService.supabase) {
-        setError('Supabase is not configured. Please check your environment variables.');
+        if (isMounted.current) setError('Supabase is not configured. Please check your environment variables.');
         return;
       }
 
       const user = await supabaseService.getCurrentUser();
+      if (!isMounted.current) return; // Check if component is still mounted after async operation
+
       if (user) {
         setCurrentUser(user);
         setIsAuthenticated(true);
@@ -169,6 +181,8 @@ const App: React.FC = () => {
     // Listen for auth changes using the new safe wrapper
     const { data: authListenerData } = onAuthStateChange(
       async (event, session) => {
+        if (!isMounted.current) return; // Check again inside the listener
+
         // Only call checkUser for SIGNED_IN or INITIAL_SESSION
         if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
           await checkUser();
@@ -215,6 +229,8 @@ const App: React.FC = () => {
           supabaseService.fetchAllUserTaskSubmissions()
         ]);
 
+        if (!isMounted.current) return; // Prevent state updates if component unmounted
+
         setUsers(usersData);
         setProjects(projectsData);
         setTasks(tasksData);
@@ -231,6 +247,7 @@ const App: React.FC = () => {
         if (currentUser) {
           // Fetch completed task IDs for the current user
           const userCompletedTaskIds = await supabaseService.fetchCompletedTaskIds(currentUser.id!);
+          if (!isMounted.current) return; // Prevent state updates if component unmounted
           setCompletedTaskIds(userCompletedTaskIds); // Update the state
 
           // Determine visible tasks based on newly fetched data for initial index calculation
@@ -265,7 +282,7 @@ const App: React.FC = () => {
         // --- END NEW LOGIC ---
 
       } catch (error) {
-        console.error('Error loading global resources:', error);
+        if (isMounted.current) console.error('Error loading global resources:', error); // Only log if still mounted
       }
     };
 
@@ -285,6 +302,8 @@ const App: React.FC = () => {
           supabaseService.fetchTaskSubmission(currentTask.id, currentUser.id!)
         ]);
 
+        if (!isMounted.current) return; // Prevent state updates if component unmounted
+
         // Note: completedTaskIds are already set by loadGlobalResources for initial load.
         // This line ensures it's up-to-date for individual task changes too.
         setCompletedTaskIds(completedIds); 
@@ -301,6 +320,7 @@ const App: React.FC = () => {
           setLanguageSimilarityJustification('');
         }
       } catch (error) {
+        if (!isMounted.current) return; // Only log if still mounted
         console.error('Error loading task data:', error);
         // Reset current task data on error to prevent displaying stale info
         setAnnotations([]);
@@ -324,6 +344,8 @@ const App: React.FC = () => {
     if (!isAuthenticated || !currentUser || !currentTask || !supabaseService.supabase) return;
 
     const timer = setTimeout(async () => {
+      if (!isMounted.current) return; // Check if mounted before running debounced save logic
+
       try {
         await supabaseService.saveTaskSubmission(
           currentTask.id,
@@ -336,13 +358,13 @@ const App: React.FC = () => {
         await supabaseService.saveAnnotations(currentTask.id, currentUser.id!, annotations);
         await supabaseService.saveImageAnnotations(currentTask.id, currentUser.id!, imageAnnotations);
 
-        // After saving, re-fetch global submissions to update agreement dashboard
         const updatedSubmissions = await supabaseService.fetchAllUserTaskSubmissions();
+        if (!isMounted.current) return;
         setAllTaskSubmissions(updatedSubmissions);
-        setSubmissionUpdateKey(prev => prev + 1); // Increment key after updating global submissions
+        setSubmissionUpdateKey(prev => prev + 1);
 
       } catch (error) {
-        console.error('Error saving task data:', error);
+        if (isMounted.current) console.error('Error saving task data:', error);
       }
     }, 1000); // Debounce saves by 1 second
 
@@ -363,10 +385,13 @@ const App: React.FC = () => {
       if (signUpError) throw signUpError;
       // After successful signup, fetch users again to get the new user with their ID
       const updatedUsers = await supabaseService.fetchUsers();
+      if (!isMounted.current) return; // Check again after async fetch
       setUsers(updatedUsers);
     } catch (error: any) {
-      console.error('Error adding user:', error.message);
-      setError(error.message);
+      if (isMounted.current) {
+        console.error('Error adding user:', error.message);
+        setError(error.message);
+      }
     }
   }, []);
 
@@ -375,14 +400,17 @@ const App: React.FC = () => {
     try {
       const { error } = await supabaseService.deleteUser(email);
       if (error) throw error;
+      if (!isMounted.current) return;
       setUsers(prev => prev.filter(u => u.email !== email));
       setAssignments(prev => prev.filter(a => a.assignedToEmail !== email)); // Clean up assignments
       setProjectAssignments(prev => prev.filter(pa => pa.assignedToEmail !== email)); // Clean up project assignments
       // Also need to delete all annotations/submissions by this user.
       // Supabase RLS or cascade deletes should handle this.
     } catch (error: any) {
-      console.error('Error deleting user:', error.message);
-      setError(error.message);
+      if (isMounted.current) {
+        console.error('Error deleting user:', error.message);
+        setError(error.message);
+      }
     }
   }, []);
 
@@ -391,13 +419,16 @@ const App: React.FC = () => {
     try {
       const { error } = await supabaseService.updateUserRole(email, role);
       if (error) throw error;
+      if (!isMounted.current) return;
       setUsers(prev => prev.map(u => u.email === email ? { ...u, role } : u));
       if (email === currentUser?.email) {
         setCurrentUser(prev => prev ? { ...prev, role } : null);
       }
     } catch (error: any) {
-      console.error('Error updating role:', error.message);
-      setError(error.message);
+      if (isMounted.current) {
+        console.error('Error updating role:', error.message);
+        setError(error.message);
+      }
     }
   }, [currentUser]);
 
@@ -407,10 +438,13 @@ const App: React.FC = () => {
       const { error } = await supabaseService.upsertTaskAssignment(taskId, email);
       if (error) throw error;
       const updatedAssignments = await supabaseService.fetchTaskAssignments();
+      if (!isMounted.current) return; // Check again after async fetch
       setAssignments(updatedAssignments);
     } catch (error: any) {
-      console.error('Error assigning task:', error.message);
-      setError(error.message);
+      if (isMounted.current) {
+        console.error('Error assigning task:', error.message);
+        setError(error.message);
+      }
     }
   }, []);
 
@@ -418,12 +452,15 @@ const App: React.FC = () => {
     if (!supabaseService.supabase) return;
     try {
       const newProject = await supabaseService.createProject(project);
+      if (!isMounted.current) return; // Check after async operation
       if (newProject) {
         setProjects(prev => [...prev, newProject]);
       }
     } catch (error: any) {
-      console.error('Error adding project:', error.message);
-      setError(error.message);
+      if (isMounted.current) {
+        console.error('Error adding project:', error.message);
+        setError(error.message);
+      }
     }
   }, []);
 
@@ -432,10 +469,13 @@ const App: React.FC = () => {
     try {
       const { error } = await supabaseService.updateProject(id, updates);
       if (error) throw error;
+      if (!isMounted.current) return;
       setProjects(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
     } catch (error: any) {
-      console.error('Error updating project:', error.message);
-      setError(error.message);
+      if (isMounted.current) {
+        console.error('Error updating project:', error.message);
+        setError(error.message);
+      }
     }
   }, []);
 
@@ -444,14 +484,17 @@ const App: React.FC = () => {
     try {
       const { error } = await supabaseService.deleteProject(id);
       if (error) throw error;
+      if (!isMounted.current) return;
       setProjects(prev => prev.filter(p => p.id !== id));
-      setTasks(prev => prev.filter(t => t.projectId !== id));
-      setProjectAssignments(prev => prev.filter(pa => pa.projectId !== id));
-      setAssignments(prev => prev.filter(a => tasks.filter(t => t.projectId === id).some(task => task.id === a.taskId)));
-      setGlobalLog(prev => prev.filter(a => tasks.filter(t => t.projectId === id).some(task => task.id === a.taskId)));
+      setTasks(prev => prev.filter(t => t.projectId !== id)); // Tasks associated with project
+      setProjectAssignments(prev => prev.filter(pa => pa.projectId !== id)); // Project assignments
+      setAssignments(prev => prev.filter(a => !tasks.filter(t => t.projectId === id).some(task => task.id === a.taskId))); // Task assignments within project
+      setGlobalLog(prev => prev.filter(a => !tasks.filter(t => t.projectId === id).some(task => task.id === a.taskId))); // Global annotations within project
     } catch (error: any) {
-      console.error('Error deleting project:', error.message);
-      setError(error.message);
+      if (isMounted.current) {
+        console.error('Error deleting project:', error.message);
+        setError(error.message);
+      }
     }
   }, [tasks]);
 
@@ -459,12 +502,15 @@ const App: React.FC = () => {
     if (!supabaseService.supabase) return;
     try {
       const newTask = await supabaseService.createTask(task);
+      if (!isMounted.current) return; // Check after async operation
       if (newTask) {
         setTasks(prev => [...prev, newTask]);
       }
     } catch (error: any) {
-      console.error('Error adding task:', error.message);
-      setError(error.message);
+      if (isMounted.current) {
+        console.error('Error adding task:', error.message);
+        setError(error.message);
+      }
     }
   }, []);
 
@@ -473,10 +519,13 @@ const App: React.FC = () => {
     try {
       const { error } = await supabaseService.updateTask(id, updates);
       if (error) throw error;
+      if (!isMounted.current) return;
       setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
     } catch (error: any) {
-      console.error('Error updating task:', error.message);
-      setError(error.message);
+      if (isMounted.current) {
+        console.error('Error updating task:', error.message);
+        setError(error.message);
+      }
     }
   }, []);
 
@@ -485,12 +534,15 @@ const App: React.FC = () => {
     try {
       const { error } = await supabaseService.deleteTask(id);
       if (error) throw error;
+      if (!isMounted.current) return;
       setTasks(prev => prev.filter(t => t.id !== id));
       setAssignments(prev => prev.filter(a => a.taskId !== id));
       setGlobalLog(prev => prev.filter(a => a.taskId !== id));
     } catch (error: any) {
-      console.error('Error deleting task:', error.message);
-      setError(error.message);
+      if (isMounted.current) {
+        console.error('Error deleting task:', error.message);
+        setError(error.message);
+      }
     }
   }, []);
 
@@ -502,10 +554,13 @@ const App: React.FC = () => {
       const { error } = await supabaseService.upsertProjectAssignment(projectId, user.id);
       if (error) throw error;
       const updatedAssignments = await supabaseService.fetchProjectAssignments();
+      if (!isMounted.current) return; // Check after async fetch
       setProjectAssignments(updatedAssignments);
     } catch (error: any) {
-      console.error('Error assigning project:', error.message);
-      setError(error.message);
+      if (isMounted.current) {
+        console.error('Error assigning project:', error.message);
+        setError(error.message);
+      }
     }
   }, [users]);
 
@@ -516,10 +571,13 @@ const App: React.FC = () => {
       if (!user?.id) throw new Error('User not found for de-assignment');
       const { error } = await supabaseService.deleteProjectAssignment(projectId, user.id);
       if (error) throw error;
+      if (!isMounted.current) return;
       setProjectAssignments(prev => prev.filter(pa => !(pa.projectId === projectId && pa.assignedToEmail === email)));
     } catch (error: any) {
-      console.error('Error removing project assignment:', error.message);
-      setError(error.message);
+      if (isMounted.current) {
+        console.error('Error removing project assignment:', error.message);
+        setError(error.message);
+      }
     }
   }, [users]);
 
@@ -633,8 +691,8 @@ const App: React.FC = () => {
       const data = JSON.parse(text_content);
 
       if (!data.project || !data.tasks || !data.annotations) {
-        alert("Invalid project file format");
-        console.error("Import failed: Invalid project file format", data);
+        if (isMounted.current) alert("Invalid project file format");
+        if (isMounted.current) console.error("Import failed: Invalid project file format", data);
         return;
       }
 
@@ -650,6 +708,7 @@ const App: React.FC = () => {
 
       await supabaseService.upsertProject(projectToUpsert);
       const updatedProjects = await supabaseService.fetchProjects();
+      if (!isMounted.current) return;
       setProjects(updatedProjects);
 
       // 2. Create or Update Tasks
@@ -671,6 +730,7 @@ const App: React.FC = () => {
         await supabaseService.upsertTask(taskToUpsert);
       }
       const updatedTasks = await supabaseService.fetchTasks();
+      if (!isMounted.current) return;
       setTasks(updatedTasks);
 
       // 3. Create or Update Annotations (Ground Truth) and Submissions
@@ -717,6 +777,7 @@ const App: React.FC = () => {
         supabaseService.fetchAllAnnotations(),
         supabaseService.fetchAllUserTaskSubmissions()
       ]);
+      if (!isMounted.current) return;
       setGlobalLog(updatedAllAnnotations);
       setAllTaskSubmissions(updatedAllSubmissions);
       setSubmissionUpdateKey(prev => prev + 1); // Increment key after updating global submissions
@@ -730,6 +791,7 @@ const App: React.FC = () => {
           currentTask?.id ? supabaseService.fetchImageAnnotations(currentTask.id, currentUser.id!) : Promise.resolve({}),
           currentTask ? supabaseService.fetchTaskSubmission(currentTask.id, currentUser.id!) : Promise.resolve(null)
         ]);
+        if (!isMounted.current) return;
         setCompletedTaskIds(userCompletedTasks);
         setAnnotations(userAnnotations);
         setImageAnnotations(userImageAnnotations);
@@ -740,28 +802,30 @@ const App: React.FC = () => {
         }
       }
 
-      alert("Project, Tasks, and Annotations imported successfully!");
+      if (isMounted.current) alert("Project, Tasks, and Annotations imported successfully!");
 
     } catch (e: any) { // Catch as any to access 'message' property
-      console.error("Import failed:", e);
-      alert(`Failed to import project. Details: ${e.message || e.toString()}`);
+      if (isMounted.current) {
+        console.error("Import failed:", e);
+        alert(`Failed to import project. Details: ${e.message || e.toString()}`);
+      }
     }
   };
 
   // Auth Handling
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    if (isMounted.current) setError('');
 
     if (!supabaseService.supabase) {
-      setError('Supabase is not configured. Cannot perform authentication.');
+      if (isMounted.current) setError('Supabase is not configured. Cannot perform authentication.');
       return;
     }
 
     try {
       if (isRegistering) {
         if (formData.password !== formData.confirmPassword) {
-          setError(t('auth_error_passwords', language));
+          if (isMounted.current) setError(t('auth_error_passwords', language));
           return;
         }
 
@@ -773,6 +837,7 @@ const App: React.FC = () => {
         );
 
         if (signUpError) {
+          if (!isMounted.current) return;
           if (signUpError.message.includes('already registered')) {
             setError(t('auth_error_email_exists', language));
           } else {
@@ -789,12 +854,14 @@ const App: React.FC = () => {
       );
 
       if (signInError) {
-        setError(t('auth_error_invalid', language));
+        if (isMounted.current) setError(t('auth_error_invalid', language));
         return;
       }
 
       // Get the user profile after successful sign-in
       const user = await supabaseService.getCurrentUser();
+      if (!isMounted.current) return; // Check after getting user
+
       if (user) {
         setCurrentUser(user);
         setIsAuthenticated(true);
@@ -804,8 +871,10 @@ const App: React.FC = () => {
       }
 
     } catch (err: any) {
-      console.error('Auth error:', err);
-      setError('An unexpected error occurred: ' + err.message);
+      if (isMounted.current) {
+        console.error('Auth error:', err);
+        setError('An unexpected error occurred: ' + err.message);
+      }
     }
   };
 
@@ -815,11 +884,14 @@ const App: React.FC = () => {
       // Perform the actual sign-out
       const { error } = await supabaseService.signOut();
       if (error) {
-        console.error('Error during Supabase sign-out:', error);
-        setError('Failed to log out. Please try again.');
+        if (isMounted.current) {
+          console.error('Error during Supabase sign-out:', error);
+          setError('Failed to log out. Please try again.');
+        }
         return;
       }
     }
+    if (!isMounted.current) return; // Final check before clearing all state
     // Clear all local state related to the user and session
     setIsAuthenticated(false);
     setCurrentUser(null);
@@ -843,11 +915,14 @@ const App: React.FC = () => {
     try {
       const { error } = await supabaseService.updateAnnotation(id, updates);
       if (error) throw error;
+      if (!isMounted.current) return;
       setGlobalLog(prev => prev.map(a => a.id === id ? { ...a, ...updates, timestamp: Date.now() } : a));
       setAnnotations(prev => prev.map(a => a.id === id ? { ...a, ...updates } : a)); // Update local task annotations too
     } catch (error: any) {
-      console.error('Error updating global annotation:', error.message);
-      setError(error.message);
+      if (isMounted.current) {
+        console.error('Error updating global annotation:', error.message);
+        setError(error.message);
+      }
     }
   }, [currentUser]);
 
@@ -856,11 +931,14 @@ const App: React.FC = () => {
     try {
       const { error } = await supabaseService.deleteAnnotation(id);
       if (error) throw error;
+      if (!isMounted.current) return;
       setGlobalLog(prev => prev.filter(a => a.id !== id));
       setAnnotations(prev => prev.filter(a => a.id !== id)); // Update local task annotations too
     } catch (error: any) {
-      console.error('Error deleting global annotation:', error.message);
-      setError(error.message);
+      if (isMounted.current) {
+        console.error('Error deleting global annotation:', error.message);
+        setError(error.message);
+      }
     }
   }, [currentUser]);
 
@@ -999,9 +1077,15 @@ const App: React.FC = () => {
 
     // Manual trigger save for immediate persistence rather than waiting for debounce
     if (currentUser && currentTask) {
-      await supabaseService.saveAnnotations(currentTask.id, currentUser.id, updatedAnnos);
-      const updatedGlobalLog = await supabaseService.fetchAllAnnotations();
-      setGlobalLog(updatedGlobalLog);
+      try {
+        await supabaseService.saveAnnotations(currentTask.id, currentUser.id, updatedAnnos);
+        if (!isMounted.current) return;
+        const updatedGlobalLog = await supabaseService.fetchAllAnnotations();
+        if (!isMounted.current) return;
+        setGlobalLog(updatedGlobalLog);
+      } catch (error) {
+        if (isMounted.current) console.error('Error saving text annotation:', error);
+      }
     }
   };
 
@@ -1046,9 +1130,15 @@ const App: React.FC = () => {
 
     // Manual trigger save for immediate persistence
     if (currentUser && currentTask) {
-      await supabaseService.saveAnnotations(currentTask.id, currentUser.id, updatedAnnos);
-      const updatedGlobalLog = await supabaseService.fetchAllAnnotations();
-      setGlobalLog(updatedGlobalLog);
+      try {
+        await supabaseService.saveAnnotations(currentTask.id, currentUser.id, updatedAnnos);
+        if (!isMounted.current) return;
+        const updatedGlobalLog = await supabaseService.fetchAllAnnotations();
+        if (!isMounted.current) return;
+        setGlobalLog(updatedGlobalLog);
+      } catch (error) {
+        if (isMounted.current) console.error('Error saving issue annotation:', error);
+      }
     }
   };
 
@@ -1121,9 +1211,15 @@ const App: React.FC = () => {
 
     // Manual trigger save for immediate persistence
     if (currentUser && currentTask) {
-      await supabaseService.saveImageAnnotations(currentTask.id, currentUser.id, newImageAnnotationsState);
-      const updatedGlobalLog = await supabaseService.fetchAllAnnotations();
-      setGlobalLog(updatedGlobalLog);
+      try {
+        await supabaseService.saveImageAnnotations(currentTask.id, currentUser.id, newImageAnnotationsState);
+        if (!isMounted.current) return;
+        const updatedGlobalLog = await supabaseService.fetchAllAnnotations();
+        if (!isMounted.current) return;
+        setGlobalLog(updatedGlobalLog);
+      } catch (error) {
+        if (isMounted.current) console.error('Error saving image annotation:', error);
+      }
     }
   };
 
@@ -1150,15 +1246,18 @@ const App: React.FC = () => {
       );
       // Re-fetch completed task IDs for the current user
       const updatedCompletedTaskIds = await supabaseService.fetchCompletedTaskIds(currentUser.id);
+      if (!isMounted.current) return;
       setCompletedTaskIds(updatedCompletedTaskIds);
 
       // Re-fetch all submissions to update AdminDashboard agreement metrics
       const updatedAllSubmissions = await supabaseService.fetchAllUserTaskSubmissions();
+      if (!isMounted.current) return;
       setAllTaskSubmissions(updatedAllSubmissions);
       setSubmissionUpdateKey(prev => prev + 1); // Increment key after updating global submissions
 
       setShowResubmitSuccess(true);
       setTimeout(() => {
+        if (!isMounted.current) return;
         setShowResubmitSuccess(false);
         if (currentTaskIndex < visibleTasks.length - 1) {
           nextTask();
@@ -1167,8 +1266,10 @@ const App: React.FC = () => {
         }
       }, 1200);
     } catch (error) {
-      console.error('Error committing task:', error);
-      setError('Failed to commit task. Please try again.');
+      if (isMounted.current) {
+        console.error('Error committing task:', error);
+        setError('Failed to commit task. Please try again.');
+      }
     }
   };
 
@@ -1180,6 +1281,7 @@ const App: React.FC = () => {
 
     try {
       await supabaseService.deleteTaskSubmission(currentTask.id, currentUser.id);
+      if (!isMounted.current) return;
       // Clear local state for this task
       setAnnotations([]);
       setImageAnnotations({});
@@ -1193,12 +1295,15 @@ const App: React.FC = () => {
         supabaseService.fetchAllAnnotations(),
         supabaseService.fetchAllUserTaskSubmissions()
       ]);
+      if (!isMounted.current) return;
       setGlobalLog(updatedGlobalLog);
       setAllTaskSubmissions(updatedAllSubmissions);
       setSubmissionUpdateKey(prev => prev + 1); // Increment key after updating global submissions
     } catch (error) {
-      console.error('Error deleting submission:', error);
-      setError('Failed to delete submission. Please try again.');
+      if (isMounted.current) {
+        console.error('Error deleting submission:', error);
+        setError('Failed to delete submission. Please try again.');
+      }
     }
   };
 
@@ -1211,6 +1316,8 @@ const App: React.FC = () => {
       if (!currentUser?.id) {
         throw new Error("User ID not available for AI suggestions.");
       }
+      if (!isMounted.current) return; // Check after suggestions arrive
+
       const newAnnos: Annotation[] = (suggestions || []).map((s: any) => ({
         id: generateUuid(), // Use generated UUID
         start: s.start,
@@ -1238,10 +1345,12 @@ const App: React.FC = () => {
         return updated;
       });
     } catch (error) {
-      console.error("Error fetching AI suggestions:", error);
-      setError("Failed to get AI suggestions.");
+      if (isMounted.current) {
+        console.error("Error fetching AI suggestions:", error);
+        setError("Failed to get AI suggestions.");
+      }
     } finally {
-      setIsAiLoading(false);
+      if (isMounted.current) setIsAiLoading(false);
     }
   };
 
@@ -1284,7 +1393,7 @@ const App: React.FC = () => {
             </button>
           </form>
           <div className="mt-6 text-center">
-            <button onClick={() => { setIsRegistering(!isRegistering); setError(''); }} className="text-sm font-bold text-indigo-600 hover:text-indigo-800">
+            <button onClick={() => { setIsRegistering(!isRegistering); if (isMounted.current) setError(''); }} className="text-sm font-bold text-indigo-600 hover:text-indigo-800">
               {isRegistering ? t('have_account', language) : t('no_account', language)}
             </button>
           </div>
@@ -1602,7 +1711,7 @@ const App: React.FC = () => {
                     currentTaskIndex === visibleTasks.length - 1 ||
                     (
                       currentUser.role !== 'admin' &&
-                      progressPercentage < 100 && ((completedTaskIds.length + 1) - (currentTaskIndex + 1))  <= 0
+                      progressPercentage < 100 && completedTaskIds.length + 1 < currentTaskIndex + 1
                     )
                   }
 
@@ -1649,8 +1758,10 @@ const App: React.FC = () => {
                 onUpdateTask={updateTask}
                 onDeleteTask={deleteTask}
                 onInspectProject={(projectId) => {
-                  setAdminProjectFilter(projectId);
-                  setViewMode('workspace');
+                  if (isMounted.current) { // Check if still mounted before state updates
+                    setAdminProjectFilter(projectId);
+                    setViewMode('workspace');
+                  }
                 }}
                 onExportProject={handleExportProject}
                 onImportProject={handleImportProject}
