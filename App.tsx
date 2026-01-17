@@ -156,6 +156,9 @@ const App: React.FC = () => {
     );
   }, [imageAnnotations]);
 
+  // Ref to track the latest auth check to prevent race conditions
+  const latestAuthCheckId = useRef(0);
+
   // --- Auth Effect ---
   useEffect(() => {
     if (!supabaseService.supabase) {
@@ -164,28 +167,38 @@ const App: React.FC = () => {
     }
 
     const checkUser = async (userFromSession: any = null) => {
-      try {
-        console.log('App: checkUser started. userFromSession present:', !!userFromSession);
+      // Increment check ID and capture it
+      const currentCheckId = ++latestAuthCheckId.current;
+      console.log(`App: checkUser started (ID: ${currentCheckId}). userFromSession present:`, !!userFromSession);
 
+      try {
         let profile: User | null = null;
         let userId = userFromSession?.id;
 
         if (userFromSession) {
-          console.log('App: Using user from session to fetch profile:', userId);
+          console.log(`App: Using user from session to fetch profile (ID: ${currentCheckId}):`, userId);
           profile = await supabaseService.fetchProfile(userId);
         } else {
-          console.log('App: No user from session, calling getCurrentUser()...');
-          const currentUserResult = await supabaseService.getCurrentUserRaw(); // Use Raw to get ID for cleanup
+          console.log(`App: No user from session, calling getCurrentUser() (ID: ${currentCheckId})...`);
+          // Use exported raw function to get ID if needed
+          const currentUserResult = await supabaseService.getCurrentUserRaw();
           if (currentUserResult) {
             userId = currentUserResult.id;
-            console.log('App: getCurrentUserRaw returned user:', userId);
+            console.log(`App: getCurrentUserRaw returned user (ID: ${currentCheckId}):`, userId);
             profile = await supabaseService.fetchProfile(userId);
           }
         }
 
-        console.log('App: Profile fetch result:', profile ? 'SUCCESS' : 'FAILURE');
+        // RACE CONDITION CHECK:
+        // If a newer check has started since we began, ignore this result.
+        if (currentCheckId !== latestAuthCheckId.current) {
+          console.warn(`App: Check ${currentCheckId} is stale (latest is ${latestAuthCheckId.current}). Ignoring result.`);
+          return;
+        }
 
         if (!isMounted.current) return;
+
+        console.log(`App: Profile fetch result (ID: ${currentCheckId}):`, profile ? 'SUCCESS' : 'FAILURE');
 
         if (profile) {
           setCurrentUser(profile);
@@ -193,19 +206,20 @@ const App: React.FC = () => {
           setViewMode(profile.role === 'admin' ? 'admin' : 'workspace');
           setError('');
         } else {
-          console.log('App: Setting authenticated to FALSE');
+          console.log(`App: Setting authenticated to FALSE (ID: ${currentCheckId})`);
           setIsAuthenticated(false);
           setCurrentUser(null);
 
-          // Safety Valve: If we have a user ID (session exists) but NO profile, force sign out.
-          // This fixes the "Normal Browser" loop where a user is stuck with a valid token but invalid profile.
+          // Safety Valve: Only run if we are the authoritative check
           if (userId) {
             console.warn('App: Orphaned session detected (User ID exists but Profile not found). Forcing sign out.');
             await supabaseService.signOut();
           }
         }
       } catch (err) {
-        console.error('App: Error during checkUser:', err);
+        if (currentCheckId !== latestAuthCheckId.current) return; // Ignore errors from stale checks too
+
+        console.error(`App: Error during checkUser (ID: ${currentCheckId}):`, err);
         if (isMounted.current) {
           setIsAuthenticated(false);
           setCurrentUser(null);
@@ -220,21 +234,22 @@ const App: React.FC = () => {
       const retrieved = localStorage.getItem(testKey);
       localStorage.removeItem(testKey);
       console.log('LocalStorage Check:', retrieved === 'working' ? 'OK' : 'FAILED');
-
-      // Log keys that look like Supabase tokens
-      Object.keys(localStorage).forEach(key => {
-        if (key.startsWith('sb-')) {
-          console.log('Supabase Token found in LocalStorage:', key);
-        }
-      });
     } catch (e) {
-      console.error('LocalStorage is not available or restricted:', e);
+      console.error('LocalStorage is not available:', e);
     }
 
-    // Initial check (non-blocking)
-    checkUser();
+    // Initial check using getSession for immediate state if possible
+    supabaseService.supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        console.log('App: Initial getSession found user, running checkUser.');
+        checkUser(session.user);
+      } else {
+        console.log('App: Initial getSession found NO user, running checkUser(null).');
+        checkUser(null);
+      }
+    });
 
-    // Listen for auth changes using the new safe wrapper
+    // Listen for auth changes
     const { data: authListenerData } = onAuthStateChange(
       async (event, session) => {
         if (!isMounted.current) return;
@@ -245,7 +260,9 @@ const App: React.FC = () => {
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION' || event === 'MFA_CHALLENGE') {
           await checkUser(session?.user);
         } else if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
-          // When signed out, directly update state
+          // Increment ID to invalidate any pending login checks
+          latestAuthCheckId.current++;
+
           setIsAuthenticated(false);
           setCurrentUser(null);
           setAnnotations([]);
