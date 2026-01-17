@@ -127,6 +127,12 @@ export const fetchProfile = async (userId: string): Promise<User | null> => {
     };
 };
 
+export const getCurrentUserRaw = async (): Promise<SupabaseUser | null> => {
+    if (!supabase) return null;
+    const { data: { user } } = await supabase.auth.getUser();
+    return user;
+};
+
 export const getCurrentUser = async (): Promise<User | null> => {
     if (!supabase) return null;
 

@@ -168,13 +168,19 @@ const App: React.FC = () => {
         console.log('App: checkUser started. userFromSession present:', !!userFromSession);
 
         let profile: User | null = null;
+        let userId = userFromSession?.id;
 
         if (userFromSession) {
-          console.log('App: Using user from session to fetch profile:', userFromSession.id);
-          profile = await supabaseService.fetchProfile(userFromSession.id);
+          console.log('App: Using user from session to fetch profile:', userId);
+          profile = await supabaseService.fetchProfile(userId);
         } else {
           console.log('App: No user from session, calling getCurrentUser()...');
-          profile = await supabaseService.getCurrentUser();
+          const currentUserResult = await supabaseService.getCurrentUserRaw(); // Use Raw to get ID for cleanup
+          if (currentUserResult) {
+            userId = currentUserResult.id;
+            console.log('App: getCurrentUserRaw returned user:', userId);
+            profile = await supabaseService.fetchProfile(userId);
+          }
         }
 
         console.log('App: Profile fetch result:', profile ? 'SUCCESS' : 'FAILURE');
@@ -190,6 +196,13 @@ const App: React.FC = () => {
           console.log('App: Setting authenticated to FALSE');
           setIsAuthenticated(false);
           setCurrentUser(null);
+
+          // Safety Valve: If we have a user ID (session exists) but NO profile, force sign out.
+          // This fixes the "Normal Browser" loop where a user is stuck with a valid token but invalid profile.
+          if (userId) {
+            console.warn('App: Orphaned session detected (User ID exists but Profile not found). Forcing sign out.');
+            await supabaseService.signOut();
+          }
         }
       } catch (err) {
         console.error('App: Error during checkUser:', err);
@@ -199,6 +212,24 @@ const App: React.FC = () => {
         }
       }
     };
+
+    // Debug LocalStorage availability
+    try {
+      const testKey = 'supabase.test-persistence';
+      localStorage.setItem(testKey, 'working');
+      const retrieved = localStorage.getItem(testKey);
+      localStorage.removeItem(testKey);
+      console.log('LocalStorage Check:', retrieved === 'working' ? 'OK' : 'FAILED');
+
+      // Log keys that look like Supabase tokens
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('sb-')) {
+          console.log('Supabase Token found in LocalStorage:', key);
+        }
+      });
+    } catch (e) {
+      console.error('LocalStorage is not available or restricted:', e);
+    }
 
     // Initial check (non-blocking)
     checkUser();
