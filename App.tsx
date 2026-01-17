@@ -157,74 +157,63 @@ const App: React.FC = () => {
   }, [imageAnnotations]);
 
   // --- Auth Effect ---
-  useEffect(() => {
-    if (!supabaseService.supabase) {
-      setError('Supabase is not configured. Please check your environment variables.');
-      return;
-    }
-
-    const checkUser = async (session: any = null) => {
-      try {
-        const user = session?.user
-          ? await supabaseService.getCurrentUser()
-          : await supabaseService.getCurrentUser();
-
-        if (!isMounted.current) return;
-
-        if (user) {
-          setCurrentUser(user);
-          setIsAuthenticated(true);
-          setViewMode(user.role === 'admin' ? 'admin' : 'workspace');
-          setError('');
-        } else {
-          setIsAuthenticated(false);
-          setCurrentUser(null);
+    // --- REPLACED AUTH EFFECT IN APP.TSX ---
+    useEffect(() => {
+      const checkUser = async () => {
+        if (!supabaseService.supabase) {
+          setError('Supabase is not configured. Please check your environment variables.');
+          return;
         }
-      } catch (err) {
-        console.error('Error during checkUser:', err);
-        if (isMounted.current) {
-          setIsAuthenticated(false);
-          setCurrentUser(null);
+  
+        try {
+          const user = await supabaseService.getCurrentUser();
+          if (!isMounted.current) return;
+  
+          if (user) {
+            setCurrentUser(user);
+            setIsAuthenticated(true);
+            setViewMode(user.role === 'admin' ? 'admin' : 'workspace');
+            setError('');
+          } else {
+            setIsAuthenticated(false);
+            setCurrentUser(null);
+          }
+        } catch (err) {
+          console.error('Error during checkUser:', err);
         }
-      }
-    };
-
-    // Listen for auth changes using the new safe wrapper
-    const { data: authListenerData } = onAuthStateChange(
-      async (event, session) => {
-        if (!isMounted.current) return;
-
-        console.log('Auth event:', event, !!session);
-
-        // Handle all events that provide or confirm a session
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION' || event === 'MFA_CHALLENGE') {
-          await checkUser(session);
-        } else if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
-          // When signed out, directly update state
-          setIsAuthenticated(false);
-          setCurrentUser(null);
-          setAnnotations([]);
-          setImageAnnotations({});
-          setCulturalScore(0);
-          setLanguageSimilarity('na');
-          setLanguageSimilarityJustification('');
-          setCompletedTaskIds([]);
-          setCurrentTaskIndex(0);
-          setFormData({ name: '', email: '', password: '', confirmPassword: '', role: 'annotator' });
-          setViewMode('workspace');
-          setGlobalLog([]);
-          setAllTaskSubmissions([]);
-          setSubmissionUpdateKey(0);
-          setError('');
+      };
+  
+      // Initial check on mount
+      checkUser();
+  
+      // Use the standard listener directly (as in File Two) to avoid wrapper bugs
+      const { data: authListener } = supabaseService.supabase.auth.onAuthStateChange(
+        async (event, session) => {
+          if (!isMounted.current) return;
+  
+          // Logic from version that handles sessions correctly
+          if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') {
+            checkUser();
+          } else if (event === 'SIGNED_OUT') {
+            setIsAuthenticated(false);
+            setCurrentUser(null);
+            setAnnotations([]);
+            setImageAnnotations({});
+            setCompletedTaskIds([]);
+            setCurrentTaskIndex(0);
+            setFormData({ name: '', email: '', password: '', confirmPassword: '', role: 'annotator' });
+          }
         }
-      }
-    );
-
-    return () => {
-      authListenerData?.subscription?.unsubscribe();
-    };
-  }, []); // Run once on mount
-
+      );
+  
+      return () => {
+        authListener?.subscription.unsubscribe();
+      };
+    }, []);
+  
+  
+  
+    // --- REPLACED AUTH EFFECT IN APP.TSX ---
   // Sync Global Resources from Supabase
   useEffect(() => {
     if (!isAuthenticated || !currentUser || !supabaseService.supabase) return;
