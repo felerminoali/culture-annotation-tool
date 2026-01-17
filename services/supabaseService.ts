@@ -94,62 +94,33 @@ export const signOut = async () => {
     return { error };
 };
 
-export const fetchProfile = async (userId: string): Promise<User | null> => {
-    if (!supabase) {
-        console.error('Supabase not initialized in fetchProfile');
-        return null;
-    }
+export const getCurrentUser = async (): Promise<User | null> => {
+    if (!supabase) return null;
 
-    console.log('Fetching profile for user ID:', userId);
-    const { data: profile, error } = await supabase
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+
+    // Fetch from public.users table where the trigger saves the profile
+    const { data: profile } = await supabase
         .from('users')
         .select('*')
-        .eq('id', userId)
+        .eq('id', user.id)
         .single();
 
-    if (error) {
-        console.error('Error fetching profile from DB:', error.message, error.code);
-        return null;
-    }
-
     if (!profile) {
-        console.warn('No profile data returned for user ID:', userId);
+        console.warn('User profile not found in public.users for ID:', user.id);
         return null;
     }
 
-    console.log('Profile fetched successfully:', profile.email);
+    console.log('Current user profile loaded:', profile.email, profile.role);
+
     return {
         id: profile.id,
         email: profile.email,
         name: profile.name,
         role: profile.role,
-        password: ''
+        password: '' // Not returned from database
     };
-};
-
-export const getCurrentUserRaw = async (): Promise<SupabaseUser | null> => {
-    if (!supabase) return null;
-    const { data: { user } } = await supabase.auth.getUser();
-    return user;
-};
-
-export const getCurrentUser = async (): Promise<User | null> => {
-    if (!supabase) return null;
-
-    console.log('getCurrentUser: calling auth.getUser()...');
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError) {
-        console.warn('getCurrentUser: auth.getUser() error:', authError.message);
-    }
-
-    if (!user) {
-        console.log('getCurrentUser: No auth user found.');
-        return null;
-    }
-
-    console.log('getCurrentUser: Auth user found, fetching profile...', user.id);
-    return fetchProfile(user.id);
 };
 
 /**

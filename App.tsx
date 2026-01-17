@@ -163,49 +163,25 @@ const App: React.FC = () => {
       return;
     }
 
-    const checkUser = async (userFromSession: any = null) => {
+    const checkUser = async (session: any = null) => {
       try {
-        console.log('App: checkUser started. userFromSession present:', !!userFromSession);
-
-        let profile: User | null = null;
-        let userId = userFromSession?.id;
-
-        if (userFromSession) {
-          console.log('App: Using user from session to fetch profile:', userId);
-          profile = await supabaseService.fetchProfile(userId);
-        } else {
-          console.log('App: No user from session, calling getCurrentUser()...');
-          const currentUserResult = await supabaseService.getCurrentUserRaw(); // Use Raw to get ID for cleanup
-          if (currentUserResult) {
-            userId = currentUserResult.id;
-            console.log('App: getCurrentUserRaw returned user:', userId);
-            profile = await supabaseService.fetchProfile(userId);
-          }
-        }
-
-        console.log('App: Profile fetch result:', profile ? 'SUCCESS' : 'FAILURE');
+        const user = session?.user
+          ? await supabaseService.getCurrentUser()
+          : await supabaseService.getCurrentUser();
 
         if (!isMounted.current) return;
 
-        if (profile) {
-          setCurrentUser(profile);
+        if (user) {
+          setCurrentUser(user);
           setIsAuthenticated(true);
-          setViewMode(profile.role === 'admin' ? 'admin' : 'workspace');
+          setViewMode(user.role === 'admin' ? 'admin' : 'workspace');
           setError('');
         } else {
-          console.log('App: Setting authenticated to FALSE');
           setIsAuthenticated(false);
           setCurrentUser(null);
-
-          // Safety Valve: If we have a user ID (session exists) but NO profile, force sign out.
-          // This fixes the "Normal Browser" loop where a user is stuck with a valid token but invalid profile.
-          if (userId) {
-            console.warn('App: Orphaned session detected (User ID exists but Profile not found). Forcing sign out.');
-            await supabaseService.signOut();
-          }
         }
       } catch (err) {
-        console.error('App: Error during checkUser:', err);
+        console.error('Error during checkUser:', err);
         if (isMounted.current) {
           setIsAuthenticated(false);
           setCurrentUser(null);
@@ -213,37 +189,16 @@ const App: React.FC = () => {
       }
     };
 
-    // Debug LocalStorage availability
-    try {
-      const testKey = 'supabase.test-persistence';
-      localStorage.setItem(testKey, 'working');
-      const retrieved = localStorage.getItem(testKey);
-      localStorage.removeItem(testKey);
-      console.log('LocalStorage Check:', retrieved === 'working' ? 'OK' : 'FAILED');
-
-      // Log keys that look like Supabase tokens
-      Object.keys(localStorage).forEach(key => {
-        if (key.startsWith('sb-')) {
-          console.log('Supabase Token found in LocalStorage:', key);
-        }
-      });
-    } catch (e) {
-      console.error('LocalStorage is not available or restricted:', e);
-    }
-
-    // Initial check (non-blocking)
-    checkUser();
-
     // Listen for auth changes using the new safe wrapper
     const { data: authListenerData } = onAuthStateChange(
       async (event, session) => {
         if (!isMounted.current) return;
 
-        console.log('App: Auth event:', event, 'Session present:', !!session);
+        console.log('Auth event:', event, !!session);
 
         // Handle all events that provide or confirm a session
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION' || event === 'MFA_CHALLENGE') {
-          await checkUser(session?.user);
+          await checkUser(session);
         } else if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
           // When signed out, directly update state
           setIsAuthenticated(false);
