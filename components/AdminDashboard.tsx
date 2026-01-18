@@ -4,6 +4,7 @@ import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 import { User, Annotation, TaskAssignment, Task, UserRole, Project, ProjectAssignment, DecisionStatus, Language, UserTaskSubmission } from '../types';
 import { t } from '../services/i18n';
+import { generateUuid } from '../services/supabaseService';
 
 
 interface AdminDashboardProps {
@@ -26,7 +27,7 @@ interface AdminDashboardProps {
   onAddProject: (project: Omit<Project, 'id' | 'createdAt'>) => void;
   onUpdateProject: (id: string, updates: Partial<Project>) => void;
   onDeleteProject: (id: string) => void;
-  onAddTask: (task: Omit<Task, 'id'>) => void;
+  onAddTask: (task: Task) => void;
   onUpdateTask: (id: string, updates: Partial<Task>) => void;
   onDeleteTask: (id: string) => void;
   onInspectProject: (projectId: string) => void;
@@ -362,7 +363,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       });
     } else {
       setEditingTask(null);
-      setTaskForm({ id: '', title: '', objective: '', description: '', projectId: '', paragraphs: [''], images: [''], audio: [''], question: '', category: '', gender: '', taskType: 'independent' });
+      setTaskForm({ id: generateUuid(), title: '', objective: '', description: '', projectId: '', paragraphs: [''], images: [''], audio: [''], question: '', category: '', gender: '', taskType: 'independent' });
     }
     setIsTaskModalOpen(true);
   };
@@ -380,7 +381,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       question: taskForm.question,
       category: taskForm.category as 'diet' | 'exercise' | undefined,
       gender: taskForm.gender as 'male' | 'female' | 'other' | undefined,
-      taskType: taskForm.taskType
+      taskType: taskForm.taskType,
+      id: taskForm.id // Include ID for creation
     };
 
     if (editingTask) {
@@ -1234,7 +1236,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     value={taskForm.id}
                     onChange={e => setTaskForm({ ...taskForm, id: e.target.value })}
                     placeholder="e.g. TASK-001"
-                    disabled={!!editingTask} // Disable editing ID for existing tasks
+                    disabled={true} // Auto-generated, not editable
                   />
                 </div>
                 <div>

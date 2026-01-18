@@ -1712,7 +1712,7 @@ const App: React.FC = () => {
                     currentTaskIndex === visibleTasks.length - 1 ||
                     (
                       currentUser.role !== 'admin' &&
-                      progressPercentage < 100 && completedTaskIds.length + 1 < currentTaskIndex
+                      progressPercentage < 100 && completedTaskIds.length + 1 < currentTaskIndex + 2
                     )
                   }
 
