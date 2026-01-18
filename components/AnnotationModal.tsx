@@ -292,23 +292,7 @@ const AnnotationModal: React.FC<AnnotationModalProps> = ({
             />
           </div>
 
-          <div className="pt-4">
-            <button
-              onClick={() => setIsImportant(!isImportant)}
-              className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all ${isImportant
-                ? 'bg-amber-50 border-amber-200 text-amber-700 shadow-sm'
-                : 'bg-white border-slate-100 text-slate-400 hover:bg-slate-50'
-                }`}
-            >
-              <div className="flex items-center">
-                <i className={`fa-solid fa-triangle-exclamation mr-3 ${isImportant ? 'text-amber-500' : 'text-slate-300'}`}></i>
-                <span className="text-[10px] font-black uppercase tracking-widest">{t('important_escalation', language)}</span>
-              </div>
-              <div className={`w-8 h-4 rounded-full relative transition-colors ${isImportant ? 'bg-amber-500' : 'bg-slate-200'}`}>
-                <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow-sm transition-all ${isImportant ? 'right-0.5' : 'left-0.5'}`}></div>
-              </div>
-            </button>
-          </div>
+          
         </div>
 
         <div className="bg-slate-50 px-8 py-6 flex justify-end space-x-4 border-t border-slate-100">
