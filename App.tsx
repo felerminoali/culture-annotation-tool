@@ -157,63 +157,63 @@ const App: React.FC = () => {
   }, [imageAnnotations]);
 
   // --- Auth Effect ---
-    // --- REPLACED AUTH EFFECT IN APP.TSX ---
-    useEffect(() => {
-      const checkUser = async () => {
-        if (!supabaseService.supabase) {
-          setError('Supabase is not configured. Please check your environment variables.');
-          return;
+  // --- REPLACED AUTH EFFECT IN APP.TSX ---
+  useEffect(() => {
+    const checkUser = async () => {
+      if (!supabaseService.supabase) {
+        setError('Supabase is not configured. Please check your environment variables.');
+        return;
+      }
+
+      try {
+        const user = await supabaseService.getCurrentUser();
+        if (!isMounted.current) return;
+
+        if (user) {
+          setCurrentUser(user);
+          setIsAuthenticated(true);
+          setViewMode(user.role === 'admin' ? 'admin' : 'workspace');
+          setError('');
+        } else {
+          setIsAuthenticated(false);
+          setCurrentUser(null);
         }
-  
-        try {
-          const user = await supabaseService.getCurrentUser();
-          if (!isMounted.current) return;
-  
-          if (user) {
-            setCurrentUser(user);
-            setIsAuthenticated(true);
-            setViewMode(user.role === 'admin' ? 'admin' : 'workspace');
-            setError('');
-          } else {
-            setIsAuthenticated(false);
-            setCurrentUser(null);
-          }
-        } catch (err) {
-          console.error('Error during checkUser:', err);
+      } catch (err) {
+        console.error('Error during checkUser:', err);
+      }
+    };
+
+    // Initial check on mount
+    checkUser();
+
+    // Use the standard listener directly (as in File Two) to avoid wrapper bugs
+    const { data: authListener } = supabaseService.supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (!isMounted.current) return;
+
+        // Logic from version that handles sessions correctly
+        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') {
+          checkUser();
+        } else if (event === 'SIGNED_OUT') {
+          setIsAuthenticated(false);
+          setCurrentUser(null);
+          setAnnotations([]);
+          setImageAnnotations({});
+          setCompletedTaskIds([]);
+          setCurrentTaskIndex(0);
+          setFormData({ name: '', email: '', password: '', confirmPassword: '', role: 'annotator' });
         }
-      };
-  
-      // Initial check on mount
-      checkUser();
-  
-      // Use the standard listener directly (as in File Two) to avoid wrapper bugs
-      const { data: authListener } = supabaseService.supabase.auth.onAuthStateChange(
-        async (event, session) => {
-          if (!isMounted.current) return;
-  
-          // Logic from version that handles sessions correctly
-          if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') {
-            checkUser();
-          } else if (event === 'SIGNED_OUT') {
-            setIsAuthenticated(false);
-            setCurrentUser(null);
-            setAnnotations([]);
-            setImageAnnotations({});
-            setCompletedTaskIds([]);
-            setCurrentTaskIndex(0);
-            setFormData({ name: '', email: '', password: '', confirmPassword: '', role: 'annotator' });
-          }
-        }
-      );
-  
-      return () => {
-        authListener?.subscription.unsubscribe();
-      };
-    }, []);
-  
-  
-  
-    // --- REPLACED AUTH EFFECT IN APP.TSX ---
+      }
+    );
+
+    return () => {
+      authListener?.subscription.unsubscribe();
+    };
+  }, []);
+
+
+
+  // --- REPLACED AUTH EFFECT IN APP.TSX ---
   // Sync Global Resources from Supabase
   useEffect(() => {
     if (!isAuthenticated || !currentUser || !supabaseService.supabase) return;
@@ -1407,13 +1407,22 @@ const App: React.FC = () => {
     <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 overflow-hidden">
       {/* GLOBAL FLOATING CHARACTER BUTTON - INFORMATION ICON (Only visible in workspace mode) */}
       {viewMode === 'workspace' && (
-        <button
-          onClick={() => setIsProfileModalOpen(true)}
-          className="fixed bottom-8 right-8 w-16 h-16 bg-indigo-600 text-white rounded-full shadow-[0_20px_50px_-10px_rgba(79,70,229,0.5)] z-[9999] flex items-center justify-center hover:scale-110 hover:bg-indigo-700 active:scale-95 transition-all group"
-          title="Researcher Profile"
-        >
-          <i className="fa-solid fa-info-circle text-2xl group-hover:rotate-12 transition-transform"></i>
-        </button>
+        <>
+          <button
+            onClick={() => setIsGuidelinesModalOpen(true)}
+            className="fixed bottom-28 right-8 w-16 h-16 bg-white text-indigo-600 border border-indigo-100 rounded-full shadow-[0_20px_50px_-10px_rgba(79,70,229,0.3)] z-[9999] flex items-center justify-center hover:scale-110 hover:bg-slate-50 active:scale-95 transition-all group"
+            title="Guidelines"
+          >
+            <i className="fa-solid fa-book-open text-xl group-hover:rotate-12 transition-transform"></i>
+          </button>
+          <button
+            onClick={() => setIsProfileModalOpen(true)}
+            className="fixed bottom-8 right-8 w-16 h-16 bg-indigo-600 text-white rounded-full shadow-[0_20px_50px_-10px_rgba(79,70,229,0.5)] z-[9999] flex items-center justify-center hover:scale-110 hover:bg-indigo-700 active:scale-95 transition-all group"
+            title="Researcher Profile"
+          >
+            <i className="fa-solid fa-info-circle text-2xl group-hover:rotate-12 transition-transform"></i>
+          </button>
+        </>
       )}
 
       {/* SIDEBAR */}
