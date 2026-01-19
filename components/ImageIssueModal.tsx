@@ -28,15 +28,27 @@ const ImageIssueModal: React.FC<ImageIssueModalProps> = ({
     language
 }) => {
     const [category, setCategory] = useState('');
+    const [customCategory, setCustomCategory] = useState('');
     const [description, setDescription] = useState('');
 
     useEffect(() => {
         if (isOpen) {
             if (existingAnnotation) {
-                setCategory(existingAnnotation.issueCategory || '');
+                const existingCategory = existingAnnotation.issueCategory || '';
+                if (issueCategories.includes(existingCategory) && existingCategory !== 'other') {
+                    setCategory(existingCategory);
+                    setCustomCategory('');
+                } else if (existingCategory) {
+                    setCategory('other');
+                    setCustomCategory(existingCategory);
+                } else {
+                    setCategory('');
+                    setCustomCategory('');
+                }
                 setDescription(existingAnnotation.issueDescription || '');
             } else {
                 setCategory('');
+                setCustomCategory('');
                 setDescription('');
             }
         }
@@ -44,11 +56,11 @@ const ImageIssueModal: React.FC<ImageIssueModalProps> = ({
 
     if (!isOpen) return null;
 
-    const isFormValid = category !== '' && description.trim() !== '';
+    const isFormValid = category !== '' && description.trim() !== '' && (category !== 'other' || customCategory.trim() !== '');
 
     const handleSave = () => {
         onSave({
-            issueCategory: category,
+            issueCategory: category === 'other' ? customCategory : category,
             issueDescription: description
         });
     };
@@ -83,6 +95,23 @@ const ImageIssueModal: React.FC<ImageIssueModalProps> = ({
                                 ))}
                             </select>
                         </div>
+
+                        {category === 'other' && (
+                            <div className="animate-in slide-in-from-top-2 duration-200">
+                                <label htmlFor="customCategory" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center ml-1">
+                                    {t('other_category_label', language)}
+                                </label>
+                                <input
+                                    id="customCategory"
+                                    type="text"
+                                    autoFocus
+                                    className="w-full px-4 py-3 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-red-500 focus:border-transparent outline-none transition-all text-xs font-bold bg-white shadow-sm"
+                                    placeholder={t('other', language)}
+                                    value={customCategory}
+                                    onChange={(e) => setCustomCategory(e.target.value)}
+                                />
+                            </div>
+                        )}
                     </div>
 
                     <div>

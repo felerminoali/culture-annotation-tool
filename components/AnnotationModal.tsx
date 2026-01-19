@@ -292,7 +292,7 @@ const AnnotationModal: React.FC<AnnotationModalProps> = ({
             />
           </div>
 
-          
+
         </div>
 
         <div className="bg-slate-50 px-8 py-6 flex justify-end space-x-4 border-t border-slate-100">
@@ -304,7 +304,8 @@ const AnnotationModal: React.FC<AnnotationModalProps> = ({
           </button>
           <button
             onClick={handleSave}
-            className={`px-10 py-3 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-xl transition-all active:scale-95 border-b-4 ${editingAnnotation ? 'bg-indigo-600 hover:bg-indigo-700 border-indigo-900' : 'bg-slate-900 hover:bg-slate-800 border-slate-700'}`}
+            disabled={isSupported === 'na' || isRelevant === 'na' || !cultureProxy || (cultureProxy === 'other' && !customCultureProxy)}
+            className={`px-10 py-3 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-xl transition-all active:scale-95 border-b-4 ${editingAnnotation ? 'bg-indigo-600 hover:bg-indigo-700 border-indigo-900' : 'bg-slate-900 hover:bg-slate-800 border-slate-700'} disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none`}
           >
             {editingAnnotation ? t('push_updates', language) : t('submit', language)}
           </button>
