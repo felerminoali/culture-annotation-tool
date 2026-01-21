@@ -88,7 +88,7 @@ export const translations = {
         control_protocol: "Annotation Control Protocol",
         culture_marker: "Culture Marker Annotation",
         selected_evidence: "What is this culture marker?",
-        is_relevant: "Is this relevant?",
+        is_relevant: "Is relevant to persona and to the context?",
         is_supported: "Can you identify this culture marker in persona information?",
         justification: "Justification",
         relevance_justification: "Relevance Justification",
@@ -122,7 +122,7 @@ export const translations = {
         description_label: "Describe the identified culture marker",
         object_placeholder: "e.g. a food, a clothing item, cultural practice, etc.",
         is_present: "Is this culture marker present in persona's information?",
-        relevance_context: "Is this culture marker relevant to persona's background and the question?",
+        relevance_context: "Is relevant to persona and to the context?",
         absence_justification: "Justification for absence",
         irrelevance_justification: "Justification for irrelevance",
         missing_placeholder: "Explain why it's missing...",
@@ -163,10 +163,10 @@ export const translations = {
         language_similarity_question: "Do think the tone in the narrative matches your culture?",
         why_justification: "Why?",
         language_similarity_label: "Narrative Tone",
-        research_id: "Research ID",
+        research_id: "Persona ID",
         status_metrics: "Status Metrics",
         actions: "Actions",
-        researcher_identity: 'Researcher Identity',
+        researcher_identity: 'Persona Identity',
         authorization: 'Authorization',
         agreement_tab: "Annotator Agreement",
         select_project: "Select Project",
@@ -240,15 +240,15 @@ export const translations = {
         i_understand: 'I Understand',
 
         // Profile Modal
-        profile_identity: 'Researcher Identity',
+        profile_identity: 'Persona Identity',
         account_role: 'Account Role',
         security_key: 'Security Key',
-        verified_researcher: 'Verified Researcher',
+        verified_researcher: 'Verified Persona',
         profile_logout: 'Log Out of Session',
 
         // Profile & Guidelines
         profile_title: "Subject Profile",
-        guidelines_title: "Research Guidelines",
+        guidelines_title: "Guidelines",
         close: "Close"
     },
     pt: {
