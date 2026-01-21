@@ -93,6 +93,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [projectForm, setProjectForm] = useState({ title: '', description: '', guideline: '' });
   const [selectedProjectFilter, setSelectedProjectFilter] = useState<string>('all');
+  const [isHtmlMode, setIsHtmlMode] = useState(false);
 
   // Bulk Actions
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
@@ -1158,16 +1159,35 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <textarea value={projectForm.description} onChange={e => setProjectForm({ ...projectForm, description: e.target.value })} className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none text-sm font-medium shadow-inner h-24" placeholder={t('project_description', language)} />
               </div>
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">{t('project_guideline', language)}</label>
-                <div className="rounded-2xl border border-slate-200 overflow-hidden shadow-inner bg-slate-50">
-                  <ReactQuill
-                    theme="snow"
-                    value={projectForm.guideline}
-                    onChange={val => setProjectForm({ ...projectForm, guideline: val })}
-                    className="bg-white"
-                    placeholder={t('project_guideline', language)}
-                  />
+                <div className="flex items-center justify-between mb-3 px-1">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('project_guideline', language)}</label>
+                  <button
+                    onClick={() => setIsHtmlMode(!isHtmlMode)}
+                    className="text-[10px] font-black text-indigo-600 hover:text-indigo-800 uppercase tracking-widest flex items-center bg-indigo-50 px-3 py-1 rounded-lg transition-all"
+                  >
+                    <i className={`fa-solid ${isHtmlMode ? 'fa-eye' : 'fa-code'} mr-2`}></i>
+                    {isHtmlMode ? 'Visual Editor' : 'HTML Source'}
+                  </button>
                 </div>
+
+                {isHtmlMode ? (
+                  <textarea
+                    value={projectForm.guideline}
+                    onChange={e => setProjectForm({ ...projectForm, guideline: e.target.value })}
+                    className="w-full px-6 py-4 bg-slate-900 text-emerald-400 border border-slate-700 rounded-2xl outline-none text-xs font-mono shadow-inner h-64 leading-relaxed"
+                    placeholder="<p>Enter raw HTML here...</p>"
+                  />
+                ) : (
+                  <div className="rounded-2xl border border-slate-200 overflow-hidden shadow-inner bg-slate-50">
+                    <ReactQuill
+                      theme="snow"
+                      value={projectForm.guideline}
+                      onChange={val => setProjectForm({ ...projectForm, guideline: val })}
+                      className="bg-white"
+                      placeholder={t('project_guideline', language)}
+                    />
+                  </div>
+                )}
               </div>
             </div>
 

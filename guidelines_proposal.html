@@ -1,0 +1,175 @@
+<div class="space-y-4 font-sans text-slate-700">
+
+  <!-- Section 1: Purpose & Scope -->
+  <details class="group bg-white p-4 rounded-xl border border-slate-200 shadow-sm" open>
+    <summary class="font-black text-lg cursor-pointer list-none flex justify-between items-center text-slate-800 outline-none">
+      <span>🎯 Purpose & Scope</span>
+      <span class="transition-transform duration-300 group-open:rotate-180 text-slate-400">▼</span>
+    </summary>
+    <div class="mt-4 text-sm space-y-4 leading-relaxed border-t border-slate-100 pt-4">
+      <div>
+        <h4 class="font-bold text-slate-900 mb-1">Purpose</h4>
+        <p>Evaluates (A) Cultural alignment and (B) Multimodal health story quality of AI-generated diabetes lifestyle stories for specific African communities.</p>
+      </div>
+      <div>
+        <h4 class="font-bold text-slate-900 mb-1">Scope</h4>
+        <p>Stories in English (Afrikaans, Hausa, Kikuyu, Luo, Swahili cultures) and Portuguese (Xichangana culture).</p>
+        <ul class="list-disc ml-5 space-y-1 mt-2">
+          <li><strong>Cultural Alignment:</strong> Presence, correctness, plausibility, and relevance of cultural signals.</li>
+          <li><strong>Multimodal Quality:</strong> Text quality (grammar, fluency) and Image quality (artifacts, mismatches).</li>
+        </ul>
+      </div>
+    </div>
+  </details>
+
+  <!-- Section 2: Inputs -->
+  <details class="group bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+    <summary class="font-black text-lg cursor-pointer list-none flex justify-between items-center text-slate-800 outline-none">
+      <span>📦 Inputs Provided</span>
+      <span class="transition-transform duration-300 group-open:rotate-180 text-slate-400">▼</span>
+    </summary>
+    <div class="mt-4 text-sm space-y-2 leading-relaxed border-t border-slate-100 pt-4">
+      <ul class="list-decimal ml-5 space-y-2">
+        <li><strong>Patient Persona:</strong> Demographics, culture, health condition (Type II Diabetes).</li>
+        <li><strong>Health Question:</strong> Specific lifestyle question (diet/exercise).</li>
+        <li><strong>Generated Health Story (Text):</strong> First-person narrative response.</li>
+        <li><strong>Generated Image:</strong> Visual content aligning with the story.</li>
+        <li><strong>Audio:</strong> Context only (do not explicitly evaluate).</li>
+      </ul>
+    </div>
+  </details>
+
+  <!-- Section 3: Cultural Markers -->
+  <details class="group bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+    <summary class="font-black text-lg cursor-pointer list-none flex justify-between items-center text-slate-800 outline-none">
+      <span>🏷️ Cultural Markers Definition</span>
+      <span class="transition-transform duration-300 group-open:rotate-180 text-slate-400">▼</span>
+    </summary>
+    <div class="mt-4 text-sm space-y-6 leading-relaxed border-t border-slate-100 pt-4">
+      <p class="italic">A cultural marker signals culturally specific norms, practices, identities, values, or environments.</p>
+      
+      <div>
+        <h4 class="font-bold text-indigo-600 mb-2 uppercase text-xs tracking-widest">A. Demographic Proxies</h4>
+        <div class="overflow-x-auto border rounded-lg">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-50 font-bold text-slate-500 uppercase">
+              <tr>
+                <th class="p-2 border-b">Proxy</th>
+                <th class="p-2 border-b">Description</th>
+                <th class="p-2 border-b">Illustrations (Text/Image)</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              <tr><td class="p-2 font-bold">Language</td><td class="p-2">Appropriate language/dialect</td><td class="p-2">Greetings, signage</td></tr>
+              <tr><td class="p-2 font-bold">Ethnicity</td><td class="p-2">Implicit/explicit identity</td><td class="p-2">Community practices, settings</td></tr>
+              <tr><td class="p-2 font-bold">Region</td><td class="p-2">Rural vs Urban</td><td class="p-2">Markets, transport, village</td></tr>
+              <tr><td class="p-2 font-bold">Religion</td><td class="p-2">Faith-based practices</td><td class="p-2">Prayer, religious spaces</td></tr>
+              <tr><td class="p-2 font-bold">Socio-economic</td><td class="p-2">Access to resources</td><td class="p-2">Public transport, informal trade</td></tr>
+              <tr><td class="p-2 font-bold">Age/Gender</td><td class="p-2">Roles & Expectations</td><td class="p-2">Caregiving, intergenerational scenes</td></tr>
+              <tr><td class="p-2 font-bold">Occupation</td><td class="p-2">Work Identity</td><td class="p-2">Tools, uniforms, work environments</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div>
+        <h4 class="font-bold text-indigo-600 mb-2 uppercase text-xs tracking-widest">B. Semantic Proxies</h4>
+        <div class="overflow-x-auto border rounded-lg">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-50 font-bold text-slate-500 uppercase">
+              <tr>
+                <th class="p-2 border-b">Proxy</th>
+                <th class="p-2 border-b">Description</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              <tr><td class="p-2 font-bold">Food & Diet</td><td class="p-2">What/how/when people eat (e.g., Ugali, communal meals)</td></tr>
+              <tr><td class="p-2 font-bold">Physical Activity</td><td class="p-2">Movement patterns (walking, farming)</td></tr>
+              <tr><td class="p-2 font-bold">Kinship</td><td class="p-2">Family structure, extended support</td></tr>
+              <tr><td class="p-2 font-bold">Community</td><td class="p-2">Collective routines, gatherings</td></tr>
+              <tr><td class="p-2 font-bold">Etiquette</td><td class="p-2">Respect norms, greetings</td></tr>
+              <tr><td class="p-2 font-bold">Values</td><td class="p-2">Collective well-being vs individual</td></tr>
+              <tr><td class="p-2 font-bold">Emotion/Attitude</td><td class="p-2">Framing of illness, resilience</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </details>
+
+  <!-- Section 4: Annotation Tasks -->
+  <details class="group bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+    <summary class="font-black text-lg cursor-pointer list-none flex justify-between items-center text-slate-800 outline-none">
+      <span>✅ Annotation Tasks</span>
+      <span class="transition-transform duration-300 group-open:rotate-180 text-slate-400">▼</span>
+    </summary>
+    <div class="mt-4 text-sm space-y-4 leading-relaxed border-t border-slate-100 pt-4">
+      <div class="space-y-4">
+        <div class="bg-slate-50 p-3 rounded-lg">
+          <h5 class="font-bold text-slate-900 border-b border-slate-200 pb-1 mb-2">Step 1: Marker Identification</h5>
+          <p>Identify markers in text/image. Assign category from list. Use "Other" with justification if needed.</p>
+        </div>
+        <div class="bg-slate-50 p-3 rounded-lg">
+          <h5 class="font-bold text-slate-900 border-b border-slate-200 pb-1 mb-2">Step 2: Support (Yes/No)</h5>
+          <p>Is it plausible/correct for the persona & culture?</p>
+        </div>
+        <div class="bg-slate-50 p-3 rounded-lg">
+          <h5 class="font-bold text-slate-900 border-b border-slate-200 pb-1 mb-2">Step 3: Relevance (Yes/No)</h5>
+          <p>Does it meaningfully inform the lifestyle advice?</p>
+        </div>
+        <div class="bg-slate-50 p-3 rounded-lg">
+          <h5 class="font-bold text-slate-900 border-b border-slate-200 pb-1 mb-2">Step 4: Intangible Markers</h5>
+          <p>Assess tone, narrative voice, and implied values (e.g., individual vs collective).</p>
+        </div>
+        <div class="bg-slate-50 p-3 rounded-lg">
+          <h5 class="font-bold text-slate-900 border-b border-slate-200 pb-1 mb-2">Step 5: Alignment Score (0-100)</h5>
+          <ul class="list-none space-y-1 text-xs">
+            <li><span class="font-bold w-12 inline-block">0:</span> No markers</li>
+            <li><span class="font-bold w-12 inline-block">1-40:</span> Minimal/Weak</li>
+            <li><span class="font-bold w-12 inline-block">41-60:</span> Moderate</li>
+            <li><span class="font-bold w-12 inline-block">61-80:</span> Strong</li>
+            <li><span class="font-bold w-12 inline-block">81+:</span> Deep, coherent alignment</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </details>
+
+  <!-- Section 5: Quality Issues -->
+  <details class="group bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+    <summary class="font-black text-lg cursor-pointer list-none flex justify-between items-center text-slate-800 outline-none">
+      <span>🚩 Quality Issue Reporting</span>
+      <span class="transition-transform duration-300 group-open:rotate-180 text-slate-400">▼</span>
+    </summary>
+    <div class="mt-4 text-sm space-y-6 leading-relaxed border-t border-slate-100 pt-4">
+      
+      <div>
+        <h4 class="font-bold text-red-500 mb-2 uppercase text-xs tracking-widest">📝 Text Issues (T1-T7)</h4>
+        <ul class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+          <li class="bg-red-50 p-2 rounded"><strong>T1:</strong> Coherence/Logic (contradictions)</li>
+          <li class="bg-red-50 p-2 rounded"><strong>T2:</strong> Instruction Clarity (vague)</li>
+          <li class="bg-red-50 p-2 rounded"><strong>T3:</strong> Persona Inconsistency</li>
+          <li class="bg-red-50 p-2 rounded"><strong>T4:</strong> Tokenism/Stereotype</li>
+          <li class="bg-red-50 p-2 rounded"><strong>T5:</strong> Language/Fluency</li>
+          <li class="bg-red-50 p-2 rounded"><strong>T6:</strong> Safety/Health Harm Risk</li>
+          <li class="bg-red-50 p-2 rounded"><strong>T7:</strong> Other</li>
+        </ul>
+      </div>
+
+      <div>
+        <h4 class="font-bold text-red-500 mb-2 uppercase text-xs tracking-widest">🖼️ Image Issues (I1-I7)</h4>
+        <ul class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+          <li class="bg-rose-50 p-2 rounded"><strong>I1:</strong> Missing/Unviewable</li>
+          <li class="bg-rose-50 p-2 rounded"><strong>I2:</strong> Low Visual Quality (blurry, artifacts)</li>
+          <li class="bg-rose-50 p-2 rounded"><strong>I3:</strong> Content Mismatch (wrong setting)</li>
+          <li class="bg-rose-50 p-2 rounded"><strong>I4:</strong> Cultural Inauthenticity ("Western default")</li>
+          <li class="bg-rose-50 p-2 rounded"><strong>I5:</strong> Safety/Medical Misleading</li>
+          <li class="bg-rose-50 p-2 rounded"><strong>I6:</strong> Sensitive/Offensive</li>
+          <li class="bg-rose-50 p-2 rounded"><strong>I7:</strong> Other</li>
+        </ul>
+      </div>
+
+    </div>
+  </details>
+
+</div>
