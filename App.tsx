@@ -977,6 +977,11 @@ const App: React.FC = () => {
     const overlaps = annotations.some(a => (s.start >= a.start && s.start < a.end) || (s.end > a.start && s.end <= a.end));
     if (!overlaps) {
       setEditingTextAnnotation(null);
+      // Clear any pending image selection state to prevent conflicts
+      setPendingPin(null);
+      setEditingImageAnno(null);
+      setActiveImageIdx(null);
+
       setCurrentSelection(s);
       setIsTypeSelectorOpen(true);
     }
@@ -1145,6 +1150,11 @@ const App: React.FC = () => {
 
   const handleAddPin = (paraIdx: number, x: number, y: number, width: number, height: number, shapeType: ShapeType) => {
     setActiveImageIdx(paraIdx);
+
+    // Clear any pending text selection state
+    setCurrentSelection(null);
+    setEditingTextAnnotation(null);
+
     setPendingPin({ x, y, width, height, shapeType });
     setEditingImageAnno(null);
     setIsTypeSelectorOpen(true);
@@ -2032,7 +2042,7 @@ const App: React.FC = () => {
 
       <AnnotationModal
         isOpen={isTextModalOpen}
-        onClose={() => setIsTextModalOpen(false)}
+        onClose={() => { setIsTextModalOpen(false); setCurrentSelection(null); setEditingTextAnnotation(null); }}
         onSave={saveTextAnnotation}
         selection={currentSelection}
         editingAnnotation={editingTextAnnotation}
@@ -2041,7 +2051,7 @@ const App: React.FC = () => {
       />
       <TextIssueModal
         isOpen={isIssueModalOpen}
-        onClose={() => setIsIssueModalOpen(false)}
+        onClose={() => { setIsIssueModalOpen(false); setCurrentSelection(null); setEditingTextAnnotation(null); }}
         onSave={saveIssueAnnotation}
         selection={currentSelection}
         editingAnnotation={editingTextAnnotation}
@@ -2072,7 +2082,13 @@ const App: React.FC = () => {
                 </button>
               </div>
               <button
-                onClick={() => { setIsTypeSelectorOpen(false); setCurrentSelection(null); }}
+                onClick={() => {
+                  setIsTypeSelectorOpen(false);
+                  setCurrentSelection(null);
+                  setPendingPin(null);
+                  setEditingImageAnno(null);
+                  setEditingTextAnnotation(null);
+                }}
                 className="w-full mt-6 py-3 text-slate-400 text-[10px] font-black uppercase tracking-widest hover:text-slate-600 transition-colors"
               >
                 {t('cancel', language)}
@@ -2083,14 +2099,14 @@ const App: React.FC = () => {
       }
       <ImageAnnotationModal
         isOpen={isImageModalOpen}
-        onClose={() => setIsImageModalOpen(false)}
+        onClose={() => { setIsImageModalOpen(false); setPendingPin(null); setEditingImageAnno(null); }}
         onSave={saveImageAnnotation}
         existingAnnotation={editingImageAnno}
         language={language}
       />
       <ImageIssueModal
         isOpen={isImageIssueModalOpen}
-        onClose={() => setIsImageIssueModalOpen(false)}
+        onClose={() => { setIsImageIssueModalOpen(false); setPendingPin(null); setEditingImageAnno(null); }}
         onSave={(data) => saveImageAnnotation({
           ...data,
           subtype: 'issue',
