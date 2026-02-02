@@ -377,7 +377,8 @@ export const fetchTasks = async (projectId?: string): Promise<Task[]> => {
         question: t.question || '',
         category: t.category,
         gender: t.gender,
-        taskType: (t.task_type || 'independent') as 'independent' | 'overlapped'
+        taskType: (t.task_type || 'independent') as 'independent' | 'overlapped' | 'control' | 'consistency',
+        metadata: t.metadata || {}
     }));
 };
 
@@ -398,7 +399,8 @@ export const createTask = async (task: Task): Promise<Task | null> => { // Chang
             question: task.question,
             category: task.category,
             gender: task.gender,
-            task_type: task.taskType
+            task_type: task.taskType,
+            metadata: task.metadata
         })
         .select()
         .single();
@@ -420,7 +422,7 @@ export const createTask = async (task: Task): Promise<Task | null> => { // Chang
         question: data.question || '',
         category: data.category,
         gender: data.gender,
-        taskType: (data.task_type || 'independent') as 'independent' | 'overlapped'
+        taskType: (data.task_type || 'independent') as 'independent' | 'overlapped' | 'control' | 'consistency'
     };
 };
 
@@ -439,6 +441,7 @@ export const updateTask = async (id: string, updates: Partial<Task>) => {
     if (updates.category !== undefined) payload.category = updates.category;
     if (updates.gender !== undefined) payload.gender = updates.gender;
     if (updates.taskType !== undefined) payload.task_type = updates.taskType;
+    if (updates.metadata !== undefined) payload.metadata = updates.metadata;
 
     const { error } = await supabase
         .from('tasks')
@@ -493,7 +496,7 @@ export const upsertTask = async (task: Task): Promise<Task | null> => {
         question: data.question || '',
         category: data.category,
         gender: data.gender,
-        taskType: (data.task_type || 'independent') as 'independent' | 'overlapped'
+        taskType: (data.task_type || 'independent') as 'independent' | 'overlapped' | 'control' | 'consistency'
     };
 };
 
@@ -523,6 +526,7 @@ export const saveTaskSubmission = async (
     culturalScore: number,
     languageSimilarity: DecisionStatus,
     languageSimilarityJustification: string,
+    generalComment: string,
     completed: boolean = false
 ) => {
     if (!supabase) throw new Error('Supabase not initialized');
@@ -535,6 +539,7 @@ export const saveTaskSubmission = async (
             cultural_score: culturalScore,
             language_similarity: languageSimilarity,
             language_similarity_justification: languageSimilarityJustification,
+            general_comment: generalComment,
             completed: completed
         }, {
             onConflict: 'task_id,user_id' // Specify composite primary key for upsert
@@ -593,6 +598,7 @@ export const fetchAllUserTaskSubmissions = async (): Promise<UserTaskSubmission[
             cultural_score,
             language_similarity,
             language_similarity_justification,
+            general_comment,
             completed,
             users(email, id)
         `);
@@ -609,6 +615,7 @@ export const fetchAllUserTaskSubmissions = async (): Promise<UserTaskSubmission[
         culturalScore: s.cultural_score,
         languageSimilarity: s.language_similarity,
         languageSimilarityJustification: s.language_similarity_justification,
+        generalComment: s.general_comment || '',
         completed: s.completed
     }));
 };
@@ -705,10 +712,10 @@ export const saveAnnotations = async (taskId: string, userId: string, annotation
 
     const { error } = await supabase
         .from('annotations')
-        .insert(annotationsData);
+        .upsert(annotationsData, { onConflict: 'id' });
 
     if (error) {
-        console.error('Error inserting annotations:', error);
+        console.error('Error upserting annotations:', error);
         throw error;
     }
     return { error: null };

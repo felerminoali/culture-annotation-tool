@@ -6,12 +6,12 @@ import { t } from '../services/i18n';
 interface ProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
-  taskTitle?: string;
+  question?: string;
   taskProfile?: string; // Now expects HTML string
   language: Language;
 }
 
-const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose, taskTitle, taskProfile, language }) => {
+const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose, question, taskProfile, language }) => {
   if (!isOpen) return null;
 
   return (
@@ -32,7 +32,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose, taskTitle,
           <div className="space-y-4 flex-1"> {/* This div will hold the actual scrollable text content */}
             <div>
               <p className="text-[9px] font-black text-indigo-600 uppercase tracking-[0.2em] mb-1">{t('profile_info', language)}</p>
-              <h3 className="text-xl font-black italic tracking-tight text-slate-900 leading-tight mb-2">{taskTitle || 'Untitled Task'}</h3>
+              <h3 className="text-[14px] font-black italic tracking-tight text-slate-900 leading-tight mb-2"><b>Question:</b> <br/>{question || 'Untitled Task'}</h3>
               <div
                 className="task-profile-html-content text-xs font-medium text-slate-500 leading-relaxed prose prose-slate max-w-none"
                 dangerouslySetInnerHTML={{ __html: taskProfile || '<p>No specific profile information available for this task.</p>' }}
@@ -59,4 +59,3 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose, taskTitle,
 };
 
 export default ProfileModal;
-    

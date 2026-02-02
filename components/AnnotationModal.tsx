@@ -41,11 +41,15 @@ const AnnotationModal: React.FC<AnnotationModalProps> = ({
   const [customCultureProxy, setCustomCultureProxy] = useState('');
 
   const proxyOptions = [
-    'language_proxy', 'ethnicity_group', 'region_geography', 'religion_faith',
-    'socio_economic', 'age_gender_roles', 'occupation_identity',
-    'food_dietary', 'physical_activity', 'kinship_structure',
-    'community_practices', 'social_etiquette', 'values_beliefs',
-    'health_attitude', 'other'
+    'language_local_expression',
+    'food_dietary_practices',
+    'place_physical_environment',
+    'healthcare_community_practices',
+    'socio_economic_context',
+    'family_household_structure',
+    'occupation_daily_routine',
+    'health_values_beliefs',
+    'other'
   ];
 
   useEffect(() => {

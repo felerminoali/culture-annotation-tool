@@ -200,7 +200,7 @@ const App: React.FC = () => {
   }, []); // Run once on mount
 
 
-  
+
   // Sync Global Resources from Supabase
   useEffect(() => {
     if (!isAuthenticated || !currentUser || !supabaseService.supabase) return;
@@ -1265,7 +1265,7 @@ const App: React.FC = () => {
           className="fixed bottom-8 right-8 w-16 h-16 bg-indigo-600 text-white rounded-full shadow-[0_20px_50px_-10px_rgba(79,70,229,0.5)] z-[9999] flex items-center justify-center hover:scale-110 hover:bg-indigo-700 active:scale-95 transition-all group"
           title="Researcher Profile"
         >
-          <i className="fa-solid fa-info-circle text-2xl group-hover:rotate-12 transition-transform"></i>
+          <i className="fa-solid fa-solid fa-hospital-user text-2xl group-hover:rotate-12 transition-transform"></i>
         </button>
       )}
 
@@ -1679,7 +1679,7 @@ const App: React.FC = () => {
                             }}
                             onEditAnnotation={a => handleEditHighlight({ ...a, start: a.start + para.offset, end: a.end + para.offset })}
                           />
-                           <div className="flex justify-end mt-4">
+                          <div className="flex justify-end mt-4">
                             <button
                               onClick={getAiSuggestions}
                               disabled={isAiLoading}

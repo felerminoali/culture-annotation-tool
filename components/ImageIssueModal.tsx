@@ -13,6 +13,7 @@ interface ImageIssueModalProps {
 const issueCategories = [
     'missing_unviewable',
     'low_visual_quality',
+    'anatomical_errors',
     'content_mismatch',
     'cultural_inauthenticity',
     'safety_medical_misleading',

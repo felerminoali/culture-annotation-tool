@@ -285,8 +285,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     question: string;
     category: string;
     gender: string;
-    taskType: 'independent' | 'overlapped';
-  }>({ id: '', title: '', objective: '', description: '', projectId: '', paragraphs: [''], images: [''], audio: [''], question: '', category: '', gender: '', taskType: 'independent' });
+    taskType: 'independent' | 'overlapped' | 'control' | 'consistency';
+    metadata: Record<string, any>;
+  }>({ id: '', title: '', objective: '', description: '', projectId: '', paragraphs: [''], images: [''], audio: [''], question: '', category: '', gender: '', taskType: 'independent', metadata: {} });
 
   // --- Handlers ---
 
@@ -360,11 +361,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         question: task.question || '',
         category: task.category || '',
         gender: task.gender || '',
-        taskType: task.taskType || 'independent'
+        taskType: task.taskType || 'independent',
+        metadata: task.metadata || {}
       });
     } else {
       setEditingTask(null);
-      setTaskForm({ id: generateUuid(), title: '', objective: '', description: '', projectId: '', paragraphs: [''], images: [''], audio: [''], question: '', category: '', gender: '', taskType: 'independent' });
+      setTaskForm({ id: generateUuid(), title: '', objective: '', description: '', projectId: '', paragraphs: [''], images: [''], audio: [''], question: '', category: '', gender: '', taskType: 'independent', metadata: {} });
     }
     setIsTaskModalOpen(true);
   };
@@ -383,6 +385,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       category: taskForm.category as 'diet' | 'exercise' | undefined,
       gender: taskForm.gender as 'male' | 'female' | 'other' | undefined,
       taskType: taskForm.taskType,
+      metadata: taskForm.metadata,
       id: taskForm.id // Include ID for creation
     };
 
@@ -1289,10 +1292,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <select
                     className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 font-bold"
                     value={taskForm.taskType}
-                    onChange={e => setTaskForm({ ...taskForm, taskType: e.target.value as 'independent' | 'overlapped' })}
+                    onChange={e => setTaskForm({ ...taskForm, taskType: e.target.value as 'independent' | 'overlapped' | 'control' | 'consistency' })}
                   >
                     <option value="independent">{t('independent', language)}</option>
                     <option value="overlapped">{t('overlapped', language)}</option>
+                    <option value="control">Control</option>
+                    <option value="consistency">Consistency</option>
                   </select>
                 </div>
                 <div>
@@ -1365,6 +1370,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <button onClick={() => removeAudio(idx)} className="text-red-400 hover:text-red-600"><i className="fa-solid fa-times"></i></button>
                       </div>
                     ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-black uppercase text-slate-400 mb-2">Metadata</label>
+                  <div className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 font-mono text-[10px] overflow-auto max-h-60 whitespace-pre-wrap">
+                    {JSON.stringify(taskForm.metadata || {}, null, 2)}
                   </div>
                 </div>
               </div>

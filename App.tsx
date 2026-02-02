@@ -56,6 +56,7 @@ const App: React.FC = () => {
   const [culturalScore, setCulturalScore] = useState<number>(0);
   const [languageSimilarity, setLanguageSimilarity] = useState<DecisionStatus>('na');
   const [languageSimilarityJustification, setLanguageSimilarityJustification] = useState<string>('');
+  const [generalComment, setGeneralComment] = useState<string>('');
 
   // UI Modal State
   const [currentSelection, setCurrentSelection] = useState<SelectionState | null>(null);
@@ -143,6 +144,42 @@ const App: React.FC = () => {
     });
     return result;
   }, [currentTask]);
+
+  const controlStats = useMemo(() => {
+    if (!currentUser) return { percent: 0, show: false, empty: true };
+    if (visibleTasks.length === 0) return { percent: 0, show: true, empty: true };
+
+    // 1. Identify Control Tasks
+    const controlTaskIds = visibleTasks
+      .filter(t => t.taskType === 'control')
+      .map(t => t.id);
+
+    if (controlTaskIds.length === 0) return { percent: 0, show: true, empty: true };
+
+    // 2. Filter User's Submissions for these tasks
+    // Note: allTaskSubmissions contains ALL users' submissions, so we must filter by currentUser.id
+    const myControlSubmissions = allTaskSubmissions.filter(s =>
+      controlTaskIds.includes(s.taskId) && s.userId === currentUser.id
+    );
+
+    const total = myControlSubmissions.length;
+    if (total === 0) return { percent: 0, show: true, empty: true };
+
+    // 3. Count Incorrectly Rated (Score > 20)
+    const incorrect = myControlSubmissions.filter(s => s.culturalScore > 20).length;
+
+    // 4. Calculate Percentage
+    const percent = (incorrect / total) * 100;
+
+    return { percent, show: true, empty: false };
+  }, [visibleTasks, allTaskSubmissions, currentUser]);
+
+  const getControlEmoji = (percent: number) => {
+    if (percent < 25) return '😊';
+    if (percent <= 50) return '😠'; // 25-50 inclusive of 50? user said 25-50
+    if (percent <= 75) return '😡'; // 50-75
+    return '😭'; // > 75
+  };
 
   const progressPercentage = useMemo(() => {
     if (visibleTasks.length === 0) return 0;
@@ -315,10 +352,12 @@ const App: React.FC = () => {
           setCulturalScore(submission.cultural_score || 0);
           setLanguageSimilarity(submission.language_similarity || 'na');
           setLanguageSimilarityJustification(submission.language_similarity_justification || '');
+          setGeneralComment(submission.general_comment || '');
         } else {
           setCulturalScore(0);
           setLanguageSimilarity('na');
           setLanguageSimilarityJustification('');
+          setGeneralComment('');
         }
       } catch (error) {
         if (!isMounted.current) return; // Only log if still mounted
@@ -354,6 +393,7 @@ const App: React.FC = () => {
           culturalScore,
           languageSimilarity,
           languageSimilarityJustification,
+          generalComment,
           isTaskSubmitted // Pass the current submission status
         );
         await supabaseService.saveAnnotations(currentTask.id, currentUser.id!, annotations);
@@ -658,7 +698,8 @@ const App: React.FC = () => {
             imageAnnotations: processedImageAnnotations,
             culturalScore: taskSubmission?.culturalScore || 0,
             languageSimilarity: taskSubmission?.languageSimilarity || 'na',
-            languageSimilarityJustification: taskSubmission?.languageSimilarityJustification || ''
+            languageSimilarityJustification: taskSubmission?.languageSimilarityJustification || '',
+            generalComment: taskSubmission?.generalComment || ''
           };
         }
       });
@@ -744,7 +785,11 @@ const App: React.FC = () => {
 
         for (const taskId of completedTaskIds) {
           // Ensure a submission exists and mark it as completed (score 0, na for simplicity on import if not specified)
-          await supabaseService.saveTaskSubmission(taskId, userId, 0, 'na', '', true); // Explicitly mark as completed
+          await supabaseService.saveTaskSubmission(taskId, userId, 0, 'na', '', '', true); // Explicitly mark as completed
+
+          if (isMounted.current) {
+            setCompletedTaskIds(prev => [...prev, taskId]);
+          }
         }
 
         for (const [taskId, tData] of Object.entries(taskData)) {
@@ -755,6 +800,7 @@ const App: React.FC = () => {
             (tData as any).culturalScore || 0,
             (tData as any).languageSimilarity || 'na',
             (tData as any).languageSimilarityJustification || '',
+            (tData as any).generalComment || '',
             true // Assume tasks with data are completed
           );
 
@@ -800,6 +846,7 @@ const App: React.FC = () => {
           setCulturalScore(userSubmission.cultural_score || 0);
           setLanguageSimilarity(userSubmission.language_similarity || 'na');
           setLanguageSimilarityJustification(userSubmission.language_similarity_justification || '');
+          setGeneralComment(userSubmission.general_comment || '');
         }
       }
 
@@ -1253,6 +1300,7 @@ const App: React.FC = () => {
         culturalScore,
         languageSimilarity,
         languageSimilarityJustification,
+        generalComment,
         true // Mark as completed
       );
       // Re-fetch completed task IDs for the current user
@@ -1299,6 +1347,7 @@ const App: React.FC = () => {
       setCulturalScore(0);
       setLanguageSimilarity('na');
       setLanguageSimilarityJustification('');
+      setGeneralComment('');
       // Update completed tasks list
       setCompletedTaskIds(prev => prev.filter(id => id !== currentTask.id));
       // Re-fetch all annotations and submissions to update AdminDashboard
@@ -1430,7 +1479,7 @@ const App: React.FC = () => {
             className="fixed bottom-8 right-8 w-16 h-16 bg-indigo-600 text-white rounded-full shadow-[0_20px_50px_-10px_rgba(79,70,229,0.5)] z-[9999] flex items-center justify-center hover:scale-110 hover:bg-indigo-700 active:scale-95 transition-all group"
             title="Researcher Profile"
           >
-            <i className="fa-solid fa-info-circle text-2xl group-hover:rotate-12 transition-transform"></i>
+            <i className="fa-solid fa-solid fa-hospital-user text-2xl group-hover:rotate-12 transition-transform"></i>
           </button>
         </>
       )}
@@ -1688,6 +1737,15 @@ const App: React.FC = () => {
                   {t('guidelines_btn', language)}
                 </button>
 
+                {/* CONTROL TASK SCORE EMOJI */}
+                {controlStats.show && (
+                  <div className="flex items-center justify-center w-10 h-10 bg-white border border-slate-100 rounded-xl shadow-sm" title={controlStats.empty ? "No control tasks submitted" : `Error Rate: ${Math.round(controlStats.percent)}%`}>
+                    <span className="text-xl" role="img" aria-label="performance">
+                      {controlStats.empty ? '😶' : getControlEmoji(controlStats.percent)}
+                    </span>
+                  </div>
+                )}
+
                 {/* IN-LINE PROGRESS BAR */}
                 <div className="hidden sm:flex items-center space-x-4 border-l border-slate-100 pl-6">
                   <div className="flex flex-col">
@@ -1905,6 +1963,19 @@ const App: React.FC = () => {
                             />
                           </div>
                         )}
+
+                        <div className="pt-8 border-t border-slate-50">
+                          <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 px-4">
+                            General Comment
+                          </label>
+                          <textarea
+                            className="w-full p-8 bg-slate-50 border border-slate-100 rounded-[2.5rem] font-medium text-slate-700 focus:ring-4 focus:ring-indigo-100 outline-none transition-all"
+                            rows={3}
+                            placeholder="Add any general comments about this task..."
+                            value={generalComment}
+                            onChange={(e) => setGeneralComment(e.target.value)}
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -2135,7 +2206,7 @@ const App: React.FC = () => {
         isOpen={isProfileModalOpen}
         onClose={() => setIsProfileModalOpen(false)}
         taskProfile={currentTask?.description}
-        taskTitle={currentTask?.title}
+        question={currentTask?.question}
         language={language}
       />
     </div >

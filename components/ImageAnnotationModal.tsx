@@ -26,13 +26,18 @@ const ImageAnnotationModal: React.FC<ImageAnnotationModalProps> = ({
   const [shapeType, setShapeType] = useState<ShapeType>('rect');
   const [cultureProxy, setCultureProxy] = useState('');
   const [comment, setComment] = useState('');
+  const [customCultureProxy, setCustomCultureProxy] = useState('');
 
   const proxyOptions = [
-    'language_proxy', 'ethnicity_group', 'region_geography', 'religion_faith',
-    'socio_economic', 'age_gender_roles', 'occupation_identity',
-    'food_dietary', 'physical_activity', 'kinship_structure',
-    'community_practices', 'social_etiquette', 'values_beliefs',
-    'health_attitude', 'other'
+    'language_local_expression',
+    'food_dietary_practices',
+    'place_physical_environment',
+    'healthcare_community_practices',
+    'socio_economic_context',
+    'family_household_structure',
+    'occupation_daily_routine',
+    'health_values_beliefs',
+    'other'
   ];
 
   useEffect(() => {
@@ -44,8 +49,16 @@ const ImageAnnotationModal: React.FC<ImageAnnotationModalProps> = ({
         setIsSupported(existingAnnotation.isSupported || 'na');
         setSupportedJustification(existingAnnotation.supportedJustification || '');
         setShapeType(existingAnnotation.shapeType || 'rect');
-        setCultureProxy(existingAnnotation.cultureProxy || '');
         setComment(existingAnnotation.comment || '');
+
+        // Handle custom proxy
+        if (existingAnnotation.cultureProxy && !proxyOptions.includes(existingAnnotation.cultureProxy)) {
+          setCultureProxy('other');
+          setCustomCultureProxy(existingAnnotation.cultureProxy);
+        } else {
+          setCultureProxy(existingAnnotation.cultureProxy || '');
+          setCustomCultureProxy('');
+        }
       } else {
         setDescription('');
         setIsRelevant('na');
@@ -53,6 +66,7 @@ const ImageAnnotationModal: React.FC<ImageAnnotationModalProps> = ({
         setIsSupported('na');
         setSupportedJustification('');
         setCultureProxy('');
+        setCustomCultureProxy('');
         setComment('');
       }
     }
@@ -99,6 +113,18 @@ const ImageAnnotationModal: React.FC<ImageAnnotationModalProps> = ({
                   <option key={opt} value={opt}>{t(opt as any, language)}</option>
                 ))}
               </select>
+              {cultureProxy === 'other' && (
+                <div className="animate-in slide-in-from-top-2 duration-200 mt-2">
+                  <label className="block text-xs font-bold text-indigo-600 mb-1">{t('other_category_label', language)}</label>
+                  <input
+                    type="text"
+                    className="w-full px-4 py-2 border-2 border-indigo-100 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-semibold text-indigo-700 bg-indigo-50/50"
+                    placeholder="Enter custom category..."
+                    value={customCultureProxy}
+                    onChange={(e) => setCustomCultureProxy(e.target.value)}
+                  />
+                </div>
+              )}
             </section>
 
             {/* Supported Section */}
@@ -192,10 +218,10 @@ const ImageAnnotationModal: React.FC<ImageAnnotationModalProps> = ({
               isSupported,
               supportedJustification,
               shapeType,
-              cultureProxy,
+              cultureProxy: cultureProxy === 'other' ? customCultureProxy : cultureProxy, // Use custom proxy if "other" selected
               comment
             })}
-            disabled={!description || !cultureProxy}
+            disabled={!description || !cultureProxy || (cultureProxy === 'other' && !customCultureProxy)}
             className="px-6 py-2 border-b-4 bg-indigo-600 hover:bg-indigo-700 border-indigo-900 font-bold text-white rounded-lg text-sm transition-all shadow-lg active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {t('save_annotation', language)}

@@ -109,7 +109,8 @@ export interface Task {
   question?: string; // New: Task-specific question
   category?: 'diet' | 'exercise'; // New: Task category
   gender?: 'male' | 'female' | 'other'; // New: Persona gender
-  taskType?: 'independent' | 'overlapped'; // New: Task type for agreement calculation
+  taskType?: 'independent' | 'overlapped' | 'control' | 'consistency'; // New: Task type for agreement calculation
+  metadata?: Record<string, any>; // New: JSON structured metadata
 }
 
 export interface ProjectAssignment {
@@ -127,5 +128,6 @@ export interface UserTaskSubmission {
   culturalScore: number;
   languageSimilarity?: DecisionStatus; // Added for Admin Dashboard
   languageSimilarityJustification?: string; // Added for Admin Dashboard
+  generalComment?: string; // General comment for the task
   completed: boolean; // Indicates if a submission exists for this task/user
 }
