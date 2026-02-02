@@ -294,6 +294,7 @@ const App: React.FC = () => {
           culturalScore,
           languageSimilarity,
           languageSimilarityJustification,
+          '', // generalComment
           isTaskSubmitted // Pass the current submission status
         );
         await supabaseService.saveAnnotations(currentTask.id, currentUser.id!, annotations);
@@ -646,7 +647,7 @@ const App: React.FC = () => {
 
         for (const taskId of completedTaskIds) {
           // Ensure a submission exists and mark it as completed (score 0, na for simplicity on import if not specified)
-          await supabaseService.saveTaskSubmission(taskId, userId, 0, 'na', '', true); // Explicitly mark as completed
+          await supabaseService.saveTaskSubmission(taskId, userId, 0, 'na', '', '', true); // Explicitly mark as completed
         }
 
         for (const [taskId, tData] of Object.entries(taskData)) {
@@ -657,6 +658,7 @@ const App: React.FC = () => {
             (tData as any).culturalScore || 0,
             (tData as any).languageSimilarity || 'na',
             (tData as any).languageSimilarityJustification || '',
+            '', // generalComment
             true // Assume tasks with data are completed
           );
 
@@ -1109,6 +1111,7 @@ const App: React.FC = () => {
         culturalScore,
         languageSimilarity,
         languageSimilarityJustification,
+        '', // generalComment
         true // Mark as completed
       );
       // Re-fetch completed task IDs for the current user
@@ -1976,8 +1979,8 @@ const App: React.FC = () => {
       <ProfileModal
         isOpen={isProfileModalOpen}
         onClose={() => setIsProfileModalOpen(false)}
+        question={currentTask?.question}
         taskProfile={currentTask?.description}
-        taskTitle={currentTask?.title}
         language={language}
       />
     </div >
