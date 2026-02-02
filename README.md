@@ -32,3 +32,5 @@ Outdoor setting (Environment)
  
 Text and Image alignment
 Add text box
+
+Continue
