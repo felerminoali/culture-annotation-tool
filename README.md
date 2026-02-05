@@ -19,18 +19,3 @@ View your app in AI Studio: https://ai.studio/apps/drive/1psiDITdPfMM8ussCWwiuxj
 3. Run the app:
    `npm run dev`
 
-
-Add pdf annotation protocol that is downloadable
-Wording:
-Is marker supported by the persona background and their context?
-Is marker relevant to the persona’s question and their context?
-Image Annotation
-When category is Other - we should be able to suggest what category
-Remove region/geography to 
-Indoor setting (kitchen, livingroom)
-Outdoor setting (Environment)
- 
-Text and Image alignment
-Add text box
-
-Continue
