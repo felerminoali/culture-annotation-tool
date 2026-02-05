@@ -43,51 +43,51 @@ const AnnotationModal: React.FC<AnnotationModalProps> = ({
   const [rating, setRating] = useState(0);
 
   const proxyOptions = [
-// Core
-  'language_local_expression',
-  'food_dietary_practices',
-  'place_physical_environment',
-  'healthcare_community_practices',
-  'socio_economic_context',
-  'family_household_structure',
-  'occupation_daily_routine',
-  'health_values_beliefs',
-  'clothing_fashion',
+    // Core
+    'language_local_expression',
+    'food_dietary_practices',
+    'place_physical_environment',
+    'healthcare_community_practices',
+    'socio_economic_context',
+    'family_household_structure',
+    'occupation_daily_routine',
+    'health_values_beliefs',
+    'clothing_fashion',
 
-  // Social & Relational Dimensions
-  'social_roles_hierarchy',
-  'community_social_networks',
-  'gender_norms_expectations',
-  'life_stage_transitions',
+    // Social & Relational Dimensions
+    'social_roles_hierarchy',
+    'community_social_networks',
+    'gender_norms_expectations',
+    'life_stage_transitions',
 
-  // Time, Rhythm & Everyday Organization
-  'temporal_orientation',
-  'seasonality_environmental_cycles',
-  'daily_rhythms_meal_patterns',
+    // Time, Rhythm & Everyday Organization
+    'temporal_orientation',
+    'seasonality_environmental_cycles',
+    'daily_rhythms_meal_patterns',
 
-  // Knowledge, Belief & Meaning Systems
-  'religious_spiritual_practices',
-  'traditional_indigenous_knowledge',
-  'health_illness_explanatory_models',
-  'values_moral_frameworks',
+    // Knowledge, Belief & Meaning Systems
+    'religious_spiritual_practices',
+    'traditional_indigenous_knowledge',
+    'health_illness_explanatory_models',
+    'values_moral_frameworks',
 
-  // Material & Technological Context
-  'technology_media_use',
-  'transport_mobility',
-  'household_resources_tools',
+    // Material & Technological Context
+    'technology_media_use',
+    'transport_mobility',
+    'household_resources_tools',
 
-  // Communication, Affect & Expression
-  'communication_style',
-  'emotional_expression_norms',
-  'storytelling_narrative_forms',
+    // Communication, Affect & Expression
+    'communication_style',
+    'emotional_expression_norms',
+    'storytelling_narrative_forms',
 
-  // Norms, Constraints & Absences
-  'social_norms_taboo',
-  'institutional_trust_relations',
-  'silence_implicit_knowledge',
+    // Norms, Constraints & Absences
+    'social_norms_taboo',
+    'institutional_trust_relations',
+    'silence_implicit_knowledge',
 
-  // Fallback
-  'other'
+    // Fallback
+    'other'
   ];
 
   useEffect(() => {
@@ -148,7 +148,7 @@ const AnnotationModal: React.FC<AnnotationModalProps> = ({
               : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
               }`}
           >
-            {status}
+            {t(status as any, language)}
           </button>
         ))}
       </div>
@@ -273,13 +273,13 @@ const AnnotationModal: React.FC<AnnotationModalProps> = ({
                     : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
                     }`}
                 >
-                  {status}
+                  {t(status as any, language)}
                 </button>
               ))}
             </div>
-            </section>
+          </section>
 
-            {/* 
+          {/* 
             {isSupported !== 'na' && (
               <div className="animate-in slide-in-from-top-2 duration-200">
                 <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">{t('justification', language)}</label>
@@ -309,7 +309,7 @@ const AnnotationModal: React.FC<AnnotationModalProps> = ({
                     : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
                     }`}
                 >
-                  {status}
+                  {t(status as any, language)}
                 </button>
               ))}
             </div>

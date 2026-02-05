@@ -163,7 +163,7 @@ const App: React.FC = () => {
     return result;
   }, [currentTask]);
 
-  const ConnectednessButtons = ({ type, index, state, setState }: { type: 'text' | 'image', index: number, state: Record<number, string>, setState: (val: Record<number, string>) => void }) => {
+  const ConnectednessButtons = ({ type, index, state, setState, annotationsCount }: { type: 'text' | 'image', index: number, state: Record<number, string>, setState: (val: Record<number, string>) => void, annotationsCount: number }) => {
     const value = state[index] || '';
     const options = ['true', 'false', 'unsure'];
 
@@ -187,6 +187,18 @@ const App: React.FC = () => {
             </button>
           ))}
         </div>
+
+        {(value === 'true' || value === 'false') && (
+          <div className={`mt-4 flex items-start text-[11px] p-4 rounded-2xl border transition-all duration-300 ${annotationsCount === 0
+            ? 'text-amber-600 bg-amber-50/50 border-amber-100/50 animate-in fade-in slide-in-from-top-2'
+            : 'text-slate-400 bg-slate-50/30 border-slate-100/50'
+            }`}>
+            <i className={`fa-solid ${annotationsCount === 0 ? 'fa-circle-exclamation' : 'fa-circle-check'} mr-3 mt-0.5 ${annotationsCount === 0 ? 'text-amber-500' : 'text-slate-400'}`}></i>
+            <span className="font-bold leading-relaxed">
+              {type === 'text' ? t('text_highlight_instruction', language) : t('image_highlight_instruction', language)}
+            </span>
+          </div>
+        )}
       </div>
     );
   };
@@ -223,7 +235,7 @@ const App: React.FC = () => {
             {feedbackKeys.map((key) => (
               <tr key={key} className="hover:bg-white transition-all group">
                 <td className="px-8 py-2">
-                  <span className="text-[11px] font-bold text-slate-700 leading-snug group-hover:text-indigo-600 transition-colors">
+                  <span className="text-[14px] font-bold text-slate-700 leading-snug group-hover:text-indigo-600 transition-colors">
                     {t(key as any, language)}
                   </span>
                 </td>
@@ -1408,6 +1420,32 @@ const App: React.FC = () => {
   const handleCommitTask = async () => {
     if (!currentTask || !currentUser?.id) return;
 
+    // Strict Validation: Check if Yes/No selections have at least one annotation
+    const validationErrors: string[] = [];
+
+    paragraphs.forEach((para, idx) => {
+      // Check Text Connectedness
+      if (textConnectness[idx] === 'true' || textConnectness[idx] === 'false') {
+        const hasTextAnno = annotations.some(a => a.start >= para.offset && a.end <= para.offset + para.text.length);
+        if (!hasTextAnno) {
+          validationErrors.push(`${t('paragraph_label', language)} #${idx + 1}`);
+        }
+      }
+
+      // Check Image Connectedness
+      if (imageConnectness[idx] === 'true' || imageConnectness[idx] === 'false') {
+        const hasImageAnno = imageAnnotations[idx.toString()] && imageAnnotations[idx.toString()].length > 0;
+        if (!hasImageAnno) {
+          validationErrors.push(`Image #${idx + 1}`);
+        }
+      }
+    });
+
+    if (validationErrors.length > 0) {
+      alert(`${t('validation_missing_annotations', language)}\n\nMissing: ${validationErrors.join(', ')}`);
+      return;
+    }
+
     const hasTextAnnotations = annotations.length > 0;
     const hasImageAnnotations = Object.values(imageAnnotations).some((list: any) => list.length > 0);
 
@@ -1705,10 +1743,10 @@ const App: React.FC = () => {
                     <div className="space-y-2">
                       {/* Keep existing render logic */}
                       {annotations.map(anno => (
-                        <div key={anno.id} className={`p-3.5 rounded-2xl border bg-white border-slate-100 text-[11px] hover:bg-slate-50 cursor-pointer group transition-all shadow-sm hover:shadow-md ${anno.subtype === 'issue' ? 'border-l-4 border-l-red-500' : 'border-l-4 border-l-indigo-500'}`} onClick={() => handleEditHighlight(anno)}>
+                        <div key={anno.id} className={`p-3.5 rounded-2xl border bg-white border-slate-100 text-[11px] hover:bg-slate-50 cursor-pointer group transition-all shadow-sm hover:shadow-md ${anno.subtype === 'issue' || anno.isSupported === 'no' ? 'border-l-4 border-l-red-500' : 'border-l-4 border-l-indigo-500'}`} onClick={() => handleEditHighlight(anno)}>
                           <div className="flex justify-between items-center mb-1">
                             <span className="font-bold text-slate-800 italic truncate mr-2">"{anno.text}"</span>
-                            <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${anno.subtype === 'issue' ? 'bg-red-50 text-red-600' : 'bg-indigo-50 text-indigo-600'}`}>
+                            <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${anno.subtype === 'issue' || anno.isSupported === 'no' ? 'bg-red-50 text-red-600' : 'bg-indigo-50 text-indigo-600'}`}>
                               {anno.subtype === 'issue' ? t('text_issue', language) : t('culture_marker', language).split(' ')[0]}
                             </span>
                             <button onClick={(e) => { e.stopPropagation(); setAnnotations(prev => prev.filter(a => a.id !== anno.id)); }} className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity"><i className="fa-solid fa-trash-can text-[10px]"></i></button>
@@ -1739,12 +1777,12 @@ const App: React.FC = () => {
                     </h2>
                     <div className="space-y-2">
                       {flatImageAnnotations.map(anno => (
-                        <div key={anno.id} className={`p-3.5 rounded-2xl border bg-white border-slate-100 text-[11px] hover:bg-slate-50 cursor-pointer group transition-all shadow-sm hover:shadow-md ${anno.subtype === 'issue' ? 'border-l-4 border-l-red-500' : 'border-l-4 border-l-indigo-500'}`} onClick={() => handleEditPin(anno.paragraph_index!, anno)}>
+                        <div key={anno.id} className={`p-3.5 rounded-2xl border bg-white border-slate-100 text-[11px] hover:bg-slate-50 cursor-pointer group transition-all shadow-sm hover:shadow-md ${anno.subtype === 'issue' || anno.isSupported === 'no' ? 'border-l-4 border-l-red-500' : 'border-l-4 border-l-indigo-500'}`} onClick={() => handleEditPin(anno.paragraph_index!, anno)}>
                           <div className="flex justify-between items-center mb-1">
                             <span className="font-bold text-slate-800 capitalize truncate mr-2">
                               {anno.subtype === 'issue' ? t(anno.issueCategory as any, language) : anno.description || `${anno.shapeType} #${anno.id.slice(0, 4)}`}
                             </span>
-                            <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${anno.subtype === 'issue' ? 'bg-red-50 text-red-600' : 'bg-indigo-50 text-indigo-600'}`}>
+                            <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${anno.subtype === 'issue' || anno.isSupported === 'no' ? 'bg-red-50 text-red-600' : 'bg-indigo-50 text-indigo-600'}`}>
                               {anno.subtype === 'issue' ? t('image_issue', language).split(' ')[1] : t('image_culture_marker', language).split(' ')[1]}
                             </span>
                             <button onClick={(e) => {
@@ -2037,6 +2075,7 @@ const App: React.FC = () => {
                             index={idx}
                             state={textConnectness}
                             setState={setTextConnectness}
+                            annotationsCount={annotations.filter(a => a.start >= para.offset && a.end <= para.offset + para.text.length).length}
                           />
                         </div>
 
@@ -2052,6 +2091,7 @@ const App: React.FC = () => {
                             index={idx}
                             state={imageConnectness}
                             setState={setImageConnectness}
+                            annotationsCount={imageAnnotations[idx.toString()]?.length || 0}
                           />
                         </div>
                       </div>
@@ -2112,20 +2152,20 @@ const App: React.FC = () => {
                     <div className="bg-white rounded-[4rem] border border-slate-100 shadow-2xl p-16 space-y-12 animate-in slide-in-from-bottom-8">
                       <div className="pt-8 border-t border-slate-50">
                         <div className="text-center mb-10">
-                          <h4 className="text-xl font-black text-slate-900 italic tracking-tight">Overall Task Feedback</h4>
-                          <p className="text-slate-400 font-bold uppercase tracking-widest text-[9px]">Please answer the following global questions about the story and images</p>
+                          <h4 className="text-xl font-black text-slate-900 italic tracking-tight"> {t('global_question', language)} </h4>
+                          {/* <p className="text-slate-400 font-bold uppercase tracking-widest text-[9px]">Please answer the following global questions about the story and images</p> */}
                         </div>
                         <GlobalFeedbackToggles />
                       </div>
 
                       <div className="pt-8 border-t border-slate-50">
                         <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 px-4">
-                          General Comment
+                          {t('general_comment', language)}
                         </label>
                         <textarea
                           className="w-full p-8 bg-slate-50 border border-slate-100 rounded-[2.5rem] font-medium text-slate-700 focus:ring-4 focus:ring-indigo-100 outline-none transition-all"
                           rows={3}
-                          placeholder="Add any general comments about this task..."
+                          placeholder={t('general_comment_placeholder', language)}
                           value={generalComment}
                           onChange={(e) => setGeneralComment(e.target.value)}
                         />

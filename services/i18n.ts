@@ -90,19 +90,26 @@ export const translations = {
         culture_marker: "Culture Marker Annotation",
         selected_evidence: "What is this culture marker?",
         is_relevant: "Is marker relevant to the persona’s question and their context?",
-        is_supported: "Connected to the culture?",
+        is_supported: "Is it connected to the culture?",
         justification: "Justification",
         relevance_justification: "Relevance Justification",
         support_justification: "Support Justification",
-        rating_label: "Rate how much this element most influenced your cultural appropriateness assessment?",
+        rating_label: "How much did this influence your cultural connectedness assessment?",
         comment_label: "Comment",
         observations_placeholder: "Record your observations...",
         reasoning_placeholder: "Explain your reasoning...",
+        global_question: "Were there other things that stood out for you in the story? ",
         text_connectedness_question: "Does this text feel culturally connected to your community?",
         image_connectedness_question: "Does this image feel culturally connected to your community?",
-        true: "True",
-        false: "False",
+        text_highlight_instruction: "Highlight 1–3 or more elements in the text that most influenced your rating. Highlight text to annotate, or click existing highlights to edit.",
+        image_highlight_instruction: "Highlight 1–3 or more elements in the image that most influenced your rating. Draw on the image to annotate, or click existing highlights to edit.",
+        validation_missing_annotations: "Please ensure at least one annotation is provided for each paragraph or image where you selected Yes/No.",
+        true: "Yes",
+        false: "No",
         unsure: "Unsure",
+        yes: "Yes",
+        no: "No",
+        na: "N/A",
         yes_no: "Yes / No",
         feedback_item: "Feedback Item",
         medically_misleading: "Some content could be medically misleading (obvious)",
@@ -134,40 +141,40 @@ export const translations = {
         occupation_daily_routine: "Occupation & Daily Routine (Jobs, lunch prep, meetings, time pressure, daily responsibilities)",
         health_values_beliefs: "Health Values, Beliefs & Attitudes (motivation, balance, “small tweaks” mindset, change)",
         clothing_fashion: "Clothing & Fashion (clothing, accessories, style, trends)",
-        
+
         // Social & Relational Dimensions
         social_roles_hierarchy: "Social Roles & Hierarchies (age, gender, seniority, authority, respect norms)",
         community_social_networks: "Community & Social Networks (neighbors, mutual aid, social obligations, communal support)",
         gender_norms_expectations: "Gender Norms & Expectations (gendered responsibilities, speech norms, social constraints)",
         life_stage_transitions: "Life Stages & Transitions (childhood, adulthood, parenting, aging-related roles)",
-        
+
         // Time, Rhythm & Everyday Organization
         temporal_orientation: "Temporal Orientation (time-use norms, punctuality, event-based vs clock-based time)",
         seasonality_environmental_cycles: "Seasonality & Environmental Cycles (weather, harvest cycles, seasonal constraints)",
         daily_rhythms_meal_patterns: "Daily Rhythms & Meal Timing (when activities and meals occur during the day)",
-        
+
         // Knowledge, Belief & Meaning Systems
         religious_spiritual_practices: "Religious & Spiritual Practices (faith traditions, rituals, moral frameworks)",
         traditional_indigenous_knowledge: "Traditional & Indigenous Knowledge (local healing, food knowledge, environmental understanding)",
         health_illness_explanatory_models: "Health & Illness Explanatory Models (how causes, symptoms, and recovery are understood)",
         values_moral_frameworks: "Values & Moral Frameworks (what is considered good, responsible, shameful, or desirable)",
-        
+
         // Material & Technological Context
         technology_media_use: "Technology & Media Use (phone sharing, platform preference, data constraints, media habits)",
         transport_mobility: "Transport & Mobility (commuting methods, travel norms, access constraints)",
         household_resources_tools: "Household Resources & Tools (appliances, cooking tools, storage, water/electricity access)",
-        
+
         // Communication, Affect & Expression
         communication_style: "Communication Style (directness, politeness strategies, humor, indirect speech)",
         emotional_expression_norms: "Emotional Expression Norms (what emotions are shown, muted, or private)",
         storytelling_narrative_forms: "Storytelling & Narrative Forms (personal stories, advice-giving, metaphor use)",
-        
+
         // Norms, Constraints & Absences
         social_norms_taboo: "Social Norms & Taboos (topics avoided, prohibited behaviors, euphemisms)",
         institutional_trust_relations: "Institutional Trust & Relations (attitudes toward government, clinics, NGOs, authority)",
         silence_implicit_knowledge: "Silence & Implicit Knowledge (assumed knowledge, omissions, things left unsaid)",
 
-        
+
         // Image Annotation Modal
         shape_annotation: "Shape Annotation",
         shape_style: "Shape Style",
@@ -182,6 +189,8 @@ export const translations = {
         missing_placeholder: "Explain why it's missing...",
         not_relevant_placeholder: "Explain why it's not relevant...",
         save_annotation: "Save Annotation",
+        general_comment: "General Comment (optional)",
+        general_comment_placeholder: "Add any general comments about this task...",
 
         // Admin Dashboard
         users_tab: "Users",
@@ -205,7 +214,7 @@ export const translations = {
         project_filter: "Project View",
         all_projects: "All Projects",
         ground_truth: "Ground Truth Analytics",
-        score_question: "How do you score this story in term of culture alignment?",
+        score_question: "How do you score this story in terms of culture alignment?",
         scoring_guide_title: "Scoring Guide (Overall)",
         score_0: "No cultural markers or relevance",
         score_1_20: "Minimal mention, not integrated or relevant",
@@ -332,6 +341,10 @@ export const translations = {
         logout: "Encerrar Sessão",
         ai_predict: "Auto-Predição IA",
 
+        global_question: "Houve outras coisas na história que se destacaram para você?",
+        general_comment: "Comentário Geral",
+        general_comment_placeholder: "Adicione qualquer comentário geral sobre esta tarefa...",
+
         // Workspace
         no_task: "Nenhuma tarefa encontrada",
         no_project_assigned: "Você não é membro de nenhum projeto ativo.",
@@ -390,15 +403,21 @@ export const translations = {
         justification: "Justificativa",
         relevance_justification: "Justificativa de Relevância",
         support_justification: "Justificativa de Suporte",
-        rating_label: "Avalie o quanto este elemento mais influenciou sua avaliação de apropriação cultural.",
+        rating_label: "Até que ponto isto influenciou a sua avaliação de conexão cultural?",
         comment_label: "Comentário",
         observations_placeholder: "Registre suas observações...",
         reasoning_placeholder: "Explique seu raciocínio...",
         text_connectedness_question: "Este texto parece culturalmente conectado à sua comunidade?",
         image_connectedness_question: "Esta imagem parece culturalmente conectada à sua comunidade?",
-        true: "Verdadeiro",
-        false: "Falso",
+        text_highlight_instruction: "Destaque 1–3 ou mais elementos no texto que mais influenciaram sua classificação. Destaque o texto para anotar ou clique em destaques existentes para editar.",
+        image_highlight_instruction: "Destaque 1–3 ou mais elementos na imagem que mais influenciaram sua classificação. Desenhe na imagem para anotar ou clique em destaques existentes para editar.",
+        validation_missing_annotations: "Certifique-se de que pelo menos uma anotação seja fornecida para cada parágrafo ou imagem onde você selecionou Sim/Não.",
+        true: "Sim",
+        false: "Não",
         unsure: "Incerto",
+        yes: "Sim",
+        no: "Não",
+        na: "N/A",
         medically_misleading: "Algum conteúdo pode ser medicamente enganoso (óbvio)",
         culture_generic: "A cultura parece genérica / padrão ocidental",
         cultural_stereotypical: "Alguns elementos culturais pareceram estereotipados ou superficiais",

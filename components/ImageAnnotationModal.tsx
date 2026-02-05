@@ -166,7 +166,7 @@ const ImageAnnotationModal: React.FC<ImageAnnotationModalProps> = ({
               )}
             </section>
 
-            
+
             <section className="space-y-3 pt-4 border-t border-gray-100">
               <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">{t('is_supported', language)}</label>
               <div className="flex space-x-2">
@@ -179,13 +179,13 @@ const ImageAnnotationModal: React.FC<ImageAnnotationModalProps> = ({
                       : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
                       }`}
                   >
-                    {status}
+                    {t(status as any, language)}
                   </button>
                 ))}
               </div>
             </section>
 
-              {/* Supported Section - COMMENTED OUT
+            {/* Supported Section - COMMENTED OUT
               {isSupported !== 'na' && (
                 <div className="animate-in slide-in-from-top-2 duration-200">
                   <label className="block text-xs font-semibold text-slate-400 mb-1">{t('justification', language)}</label>
@@ -214,7 +214,7 @@ const ImageAnnotationModal: React.FC<ImageAnnotationModalProps> = ({
                       : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
                       }`}
                   >
-                    {status}
+                    {t(status as any, language)}
                   </button>
                 ))}
               </div>

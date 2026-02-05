@@ -49,13 +49,13 @@ const TextDisplay: React.FC<TextDisplayProps> = ({ content, annotations, onSelec
       }
 
       // Add the highlight
-      const isIssue = anno.subtype === 'issue';
+      const isIssue = anno.subtype === 'issue' || anno.isSupported === 'no';
       parts.push(
         <span
           key={anno.id}
           className={`highlight-span group relative border-b-2 transition-all duration-200 ${isIssue
-              ? 'border-red-500 bg-red-50 hover:bg-red-100'
-              : anno.isImportant ? 'border-amber-500 bg-amber-50 hover:bg-amber-100' : 'border-indigo-500 bg-indigo-50 hover:bg-indigo-100'
+            ? 'border-red-500 bg-red-50 hover:bg-red-100'
+            : anno.isImportant ? 'border-amber-500 bg-amber-50 hover:bg-amber-100' : 'border-indigo-500 bg-indigo-50 hover:bg-indigo-100'
             }`}
           onClick={(e) => {
             e.stopPropagation();
@@ -90,10 +90,10 @@ const TextDisplay: React.FC<TextDisplayProps> = ({ content, annotations, onSelec
       >
         {renderContent()}
       </div>
-      <div className="mt-4 flex items-center text-sm text-gray-400">
+      {/* <div className="mt-4 flex items-center text-sm text-gray-400">
         <i className="fa-solid fa-circle-info mr-2"></i>
         <span>Highlight text to annotate, or click existing highlights to edit.</span>
-      </div>
+      </div> */}
     </div>
   );
 };
