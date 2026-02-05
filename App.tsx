@@ -170,7 +170,7 @@ const App: React.FC = () => {
     return (
       <div className="mt-4 p-6 bg-white border border-slate-100 rounded-3xl shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-500">
         <label className="block text-xs font-black text-slate-700 italic mb-4">
-          <i className="fa-solid fa-hand-holding-heart mr-2 text-indigo-500"></i>
+
           {type === 'text' ? t('text_connectedness_question', language) : t('image_connectedness_question', language)}
         </label>
         <div className="flex space-x-3">
