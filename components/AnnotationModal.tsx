@@ -43,15 +43,51 @@ const AnnotationModal: React.FC<AnnotationModalProps> = ({
   const [rating, setRating] = useState(0);
 
   const proxyOptions = [
-    'language_local_expression',
-    'food_dietary_practices',
-    'place_physical_environment',
-    'healthcare_community_practices',
-    'socio_economic_context',
-    'family_household_structure',
-    'occupation_daily_routine',
-    'health_values_beliefs',
-    'other'
+// Core
+  'language_local_expression',
+  'food_dietary_practices',
+  'place_physical_environment',
+  'healthcare_community_practices',
+  'socio_economic_context',
+  'family_household_structure',
+  'occupation_daily_routine',
+  'health_values_beliefs',
+  'clothing_fashion',
+
+  // Social & Relational Dimensions
+  'social_roles_hierarchy',
+  'community_social_networks',
+  'gender_norms_expectations',
+  'life_stage_transitions',
+
+  // Time, Rhythm & Everyday Organization
+  'temporal_orientation',
+  'seasonality_environmental_cycles',
+  'daily_rhythms_meal_patterns',
+
+  // Knowledge, Belief & Meaning Systems
+  'religious_spiritual_practices',
+  'traditional_indigenous_knowledge',
+  'health_illness_explanatory_models',
+  'values_moral_frameworks',
+
+  // Material & Technological Context
+  'technology_media_use',
+  'transport_mobility',
+  'household_resources_tools',
+
+  // Communication, Affect & Expression
+  'communication_style',
+  'emotional_expression_norms',
+  'storytelling_narrative_forms',
+
+  // Norms, Constraints & Absences
+  'social_norms_taboo',
+  'institutional_trust_relations',
+  'silence_implicit_knowledge',
+
+  // Fallback
+  'other'
   ];
 
   useEffect(() => {
@@ -222,7 +258,7 @@ const AnnotationModal: React.FC<AnnotationModalProps> = ({
             )}
           </div>
 
-          {/* 2. Supported Section */}
+          {/* 2. Supported Section - COMMENTED OUT */}
           <section className="space-y-3 pt-4 border-t border-slate-100">
             <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center">
               <i className="fa-solid fa-circle-check mr-2 text-emerald-500"></i> {t('is_supported', language)}
@@ -241,6 +277,9 @@ const AnnotationModal: React.FC<AnnotationModalProps> = ({
                 </button>
               ))}
             </div>
+            </section>
+
+            {/* 
             {isSupported !== 'na' && (
               <div className="animate-in slide-in-from-top-2 duration-200">
                 <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">{t('justification', language)}</label>
@@ -253,8 +292,9 @@ const AnnotationModal: React.FC<AnnotationModalProps> = ({
               </div>
             )}
           </section>
+          */}
 
-          {/* 3. Relevant Section */}
+          {/* 3. Relevant Section - COMMENTED OUT
           <section className="space-y-3 pt-4 border-t border-slate-100">
             <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center">
               <i className="fa-solid fa-bullseye mr-2 text-indigo-500"></i> {t('is_relevant', language)}
@@ -285,6 +325,7 @@ const AnnotationModal: React.FC<AnnotationModalProps> = ({
               </div>
             )}
           </section>
+          */}
 
           {/* 4. Rating Section */}
           <div className="pt-4 border-t border-slate-100">
@@ -305,7 +346,7 @@ const AnnotationModal: React.FC<AnnotationModalProps> = ({
             </div>
           </div>
 
-          {/* 4. Comment Section */}
+          {/* 4. Comment Section - COMMENTED OUT
           <div className="pt-4 border-t border-slate-100">
             <label htmlFor="comment" className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center">
               <i className="fa-solid fa-pen-nib mr-2 text-indigo-500"></i> {t('comment_label', language)}
@@ -318,6 +359,7 @@ const AnnotationModal: React.FC<AnnotationModalProps> = ({
               onChange={(e) => setComment(e.target.value)}
             />
           </div>
+          */}
 
 
         </div>
@@ -331,7 +373,7 @@ const AnnotationModal: React.FC<AnnotationModalProps> = ({
           </button>
           <button
             onClick={handleSave}
-            disabled={isSupported === 'na' || isRelevant === 'na' || !cultureProxy || (cultureProxy === 'other' && !customCultureProxy) || rating === 0}
+            disabled={!cultureProxy || (cultureProxy === 'other' && !customCultureProxy) || rating === 0 || isSupported === 'na'}
             className={`px-10 py-3 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-xl transition-all active:scale-95 border-b-4 ${editingAnnotation ? 'bg-indigo-600 hover:bg-indigo-700 border-indigo-900' : 'bg-slate-900 hover:bg-slate-800 border-slate-700'} disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none`}
           >
             {editingAnnotation ? t('push_updates', language) : t('submit', language)}

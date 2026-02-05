@@ -39,6 +39,41 @@ const ImageAnnotationModal: React.FC<ImageAnnotationModalProps> = ({
     'family_household_structure',
     'occupation_daily_routine',
     'health_values_beliefs',
+    'clothing_fashion',
+
+    // Social & Relational Dimensions
+    'social_roles_hierarchy',
+    'community_social_networks',
+    'gender_norms_expectations',
+    'life_stage_transitions',
+
+    // Time, Rhythm & Everyday Organization
+    'temporal_orientation',
+    'seasonality_environmental_cycles',
+    'daily_rhythms_meal_patterns',
+
+    // Knowledge, Belief & Meaning Systems
+    'religious_spiritual_practices',
+    'traditional_indigenous_knowledge',
+    'health_illness_explanatory_models',
+    'values_moral_frameworks',
+
+    // Material & Technological Context
+    'technology_media_use',
+    'transport_mobility',
+    'household_resources_tools',
+
+    // Communication, Affect & Expression
+    'communication_style',
+    'emotional_expression_norms',
+    'storytelling_narrative_forms',
+
+    // Norms, Constraints & Absences
+    'social_norms_taboo',
+    'institutional_trust_relations',
+    'silence_implicit_knowledge',
+
+    // Fallback
     'other'
   ];
 
@@ -131,11 +166,11 @@ const ImageAnnotationModal: React.FC<ImageAnnotationModalProps> = ({
               )}
             </section>
 
-            {/* Supported Section */}
+            
             <section className="space-y-3 pt-4 border-t border-gray-100">
               <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">{t('is_supported', language)}</label>
               <div className="flex space-x-2">
-                {(['yes', 'no', 'na'] as DecisionStatus[]).map((status) => (
+                {(['yes', 'no'] as DecisionStatus[]).map((status) => (
                   <button
                     key={status}
                     onClick={() => setIsSupported(status)}
@@ -148,6 +183,9 @@ const ImageAnnotationModal: React.FC<ImageAnnotationModalProps> = ({
                   </button>
                 ))}
               </div>
+            </section>
+
+              {/* Supported Section - COMMENTED OUT
               {isSupported !== 'na' && (
                 <div className="animate-in slide-in-from-top-2 duration-200">
                   <label className="block text-xs font-semibold text-slate-400 mb-1">{t('justification', language)}</label>
@@ -161,8 +199,9 @@ const ImageAnnotationModal: React.FC<ImageAnnotationModalProps> = ({
                 </div>
               )}
             </section>
+            */}
 
-            {/* Relevance Section */}
+            {/* Relevance Section - COMMENTED OUT
             <section className="space-y-3 pt-4 border-t border-gray-100">
               <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">{t('is_relevant', language)}</label>
               <div className="flex space-x-2">
@@ -192,6 +231,7 @@ const ImageAnnotationModal: React.FC<ImageAnnotationModalProps> = ({
                 </div>
               )}
             </section>
+            */}
 
             {/* Rating Section */}
             <section className="space-y-3 pt-4 border-t border-gray-100">
@@ -212,7 +252,7 @@ const ImageAnnotationModal: React.FC<ImageAnnotationModalProps> = ({
               </div>
             </section>
 
-            {/* Comment Section */}
+            {/* Comment Section - COMMENTED OUT
             <section className="space-y-2 pt-4 border-t border-gray-100">
               <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">{t('comment_label', language)}</label>
               <textarea
@@ -223,6 +263,7 @@ const ImageAnnotationModal: React.FC<ImageAnnotationModalProps> = ({
                 onChange={(e) => setComment(e.target.value)}
               />
             </section>
+            */}
           </div>
         </div>
 
@@ -245,7 +286,7 @@ const ImageAnnotationModal: React.FC<ImageAnnotationModalProps> = ({
               comment,
               rating
             })}
-            disabled={!description || !cultureProxy || (cultureProxy === 'other' && !customCultureProxy) || rating === 0}
+            disabled={!cultureProxy || (cultureProxy === 'other' && !customCultureProxy) || rating === 0 || isSupported === 'na'}
             className="px-6 py-2 border-b-4 bg-indigo-600 hover:bg-indigo-700 border-indigo-900 font-bold text-white rounded-lg text-sm transition-all shadow-lg active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {t('save_annotation', language)}

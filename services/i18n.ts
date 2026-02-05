@@ -90,11 +90,11 @@ export const translations = {
         culture_marker: "Culture Marker Annotation",
         selected_evidence: "What is this culture marker?",
         is_relevant: "Is marker relevant to the persona’s question and their context?",
-        is_supported: "Is marker supported by the persona background and their context?",
+        is_supported: "Connected to the culture?",
         justification: "Justification",
         relevance_justification: "Relevance Justification",
         support_justification: "Support Justification",
-        rating_label: "Rating",
+        rating_label: "Rate how much this element most influenced your cultural appropriateness assessment?",
         comment_label: "Comment",
         observations_placeholder: "Record your observations...",
         reasoning_placeholder: "Explain your reasoning...",
@@ -103,6 +103,8 @@ export const translations = {
         true: "True",
         false: "False",
         unsure: "Unsure",
+        yes_no: "Yes / No",
+        feedback_item: "Feedback Item",
         medically_misleading: "Some content could be medically misleading (obvious)",
         culture_generic: "Culture feels generic / Western-default",
         cultural_stereotypical: "Some cultural elements felt stereotypical or superficial",
@@ -121,6 +123,8 @@ export const translations = {
         important_escalation: "Escalate to High Importance",
         culture_proxy: "Culture Marker Category",
         select_proxy: "Select a Culture Marker Category",
+
+        // Core Culture Markers
         language_local_expression: "Language & Local Expression (slang, code-switching, local phrases: “Ag”, “mos”, “lekker”)",
         food_dietary_practices: "Food & Dietary Practices (foods, preparation methods, meal styles, eating habits)",
         place_physical_environment: "Place & Physical Environment (province, home, clinics, kitchen, shops, neighborhoods, local setting)",
@@ -129,7 +133,41 @@ export const translations = {
         family_household_structure: "Family & Household Structure (family roles, caregiving, shared meals, household dynamics)",
         occupation_daily_routine: "Occupation & Daily Routine (Jobs, lunch prep, meetings, time pressure, daily responsibilities)",
         health_values_beliefs: "Health Values, Beliefs & Attitudes (motivation, balance, “small tweaks” mindset, change)",
+        clothing_fashion: "Clothing & Fashion (clothing, accessories, style, trends)",
+        
+        // Social & Relational Dimensions
+        social_roles_hierarchy: "Social Roles & Hierarchies (age, gender, seniority, authority, respect norms)",
+        community_social_networks: "Community & Social Networks (neighbors, mutual aid, social obligations, communal support)",
+        gender_norms_expectations: "Gender Norms & Expectations (gendered responsibilities, speech norms, social constraints)",
+        life_stage_transitions: "Life Stages & Transitions (childhood, adulthood, parenting, aging-related roles)",
+        
+        // Time, Rhythm & Everyday Organization
+        temporal_orientation: "Temporal Orientation (time-use norms, punctuality, event-based vs clock-based time)",
+        seasonality_environmental_cycles: "Seasonality & Environmental Cycles (weather, harvest cycles, seasonal constraints)",
+        daily_rhythms_meal_patterns: "Daily Rhythms & Meal Timing (when activities and meals occur during the day)",
+        
+        // Knowledge, Belief & Meaning Systems
+        religious_spiritual_practices: "Religious & Spiritual Practices (faith traditions, rituals, moral frameworks)",
+        traditional_indigenous_knowledge: "Traditional & Indigenous Knowledge (local healing, food knowledge, environmental understanding)",
+        health_illness_explanatory_models: "Health & Illness Explanatory Models (how causes, symptoms, and recovery are understood)",
+        values_moral_frameworks: "Values & Moral Frameworks (what is considered good, responsible, shameful, or desirable)",
+        
+        // Material & Technological Context
+        technology_media_use: "Technology & Media Use (phone sharing, platform preference, data constraints, media habits)",
+        transport_mobility: "Transport & Mobility (commuting methods, travel norms, access constraints)",
+        household_resources_tools: "Household Resources & Tools (appliances, cooking tools, storage, water/electricity access)",
+        
+        // Communication, Affect & Expression
+        communication_style: "Communication Style (directness, politeness strategies, humor, indirect speech)",
+        emotional_expression_norms: "Emotional Expression Norms (what emotions are shown, muted, or private)",
+        storytelling_narrative_forms: "Storytelling & Narrative Forms (personal stories, advice-giving, metaphor use)",
+        
+        // Norms, Constraints & Absences
+        social_norms_taboo: "Social Norms & Taboos (topics avoided, prohibited behaviors, euphemisms)",
+        institutional_trust_relations: "Institutional Trust & Relations (attitudes toward government, clinics, NGOs, authority)",
+        silence_implicit_knowledge: "Silence & Implicit Knowledge (assumed knowledge, omissions, things left unsaid)",
 
+        
         // Image Annotation Modal
         shape_annotation: "Shape Annotation",
         shape_style: "Shape Style",
@@ -286,6 +324,8 @@ export const translations = {
         no_account: "Precisa de uma conta? Registre-se",
         have_account: "Já tem uma conta? Login",
 
+        yes_no: "Sim / Não",
+        feedback_item: "Feedback Item",
         // Sidebar
         workspace_nav: "Espaço de Trabalho Ativo",
         admin_nav: "Painel de Controle",
@@ -346,11 +386,11 @@ export const translations = {
         culture_marker: "Anotação de Marcador Cultural",
         selected_evidence: "Evidência Selecionada",
         is_relevant: "Isso é relevante?",
-        is_supported: "Isso é suportado?",
+        is_supported: "Esta conectado a sua cultura?",
         justification: "Justificativa",
         relevance_justification: "Justificativa de Relevância",
         support_justification: "Justificativa de Suporte",
-        rating_label: "Classificação",
+        rating_label: "Avalie o quanto este elemento mais influenciou sua avaliação de apropriação cultural.",
         comment_label: "Comentário",
         observations_placeholder: "Registre suas observações...",
         reasoning_placeholder: "Explique seu raciocínio...",
@@ -385,6 +425,41 @@ export const translations = {
         family_household_structure: "Estrutura Familiar e Doméstica (papéis familiares, cuidado, refeições compartilhadas, dinâmica doméstica)",
         occupation_daily_routine: "Ocupação e Rotina Diária (empregos, preparação do almoço, reuniões, pressão de tempo, responsabilidades diárias)",
         health_values_beliefs: "Valores, Crenças e Atitudes de Saúde (motivação, equilíbrio, mentalidade de “pequenos ajustes”, mudança)",
+
+        clothing_fashion: "Vestuário & Moda (roupas, acessórios, estilo, tendências)",
+
+        // Dimensões Sociais & Relacionais
+        social_roles_hierarchy: "Papéis Sociais & Hierarquias (idade, género, senioridade, autoridade, normas de respeito)",
+        community_social_networks: "Comunidade & Redes Sociais (vizinhos, ajuda mútua, obrigações sociais, apoio comunitário)",
+        gender_norms_expectations: "Normas & Expectativas de Género (responsabilidades associadas ao género, normas de fala, restrições sociais)",
+        life_stage_transitions: "Fases da Vida & Transições (infância, idade adulta, parentalidade, papéis associados ao envelhecimento)",
+
+        // Tempo, Ritmo & Organização do Quotidiano
+        temporal_orientation: "Orientação Temporal (normas de uso do tempo, pontualidade, tempo orientado por eventos vs relógio)",
+        seasonality_environmental_cycles: "Sazonalidade & Ciclos Ambientais (clima, ciclos agrícolas, restrições sazonais)",
+        daily_rhythms_meal_patterns: "Ritmos Diários & Horários das Refeições (quando as atividades e refeições ocorrem ao longo do dia)",
+
+        // Conhecimento, Crença & Sistemas de Significado
+        religious_spiritual_practices: "Práticas Religiosas & Espirituais (tradições de fé, rituais, quadros morais)",
+        traditional_indigenous_knowledge: "Conhecimento Tradicional & Indígena (curas locais, saberes alimentares, compreensão ambiental)",
+        health_illness_explanatory_models: "Modelos Explicativos de Saúde & Doença (como causas, sintomas e recuperação são compreendidos)",
+        values_moral_frameworks: "Valores & Quadros Morais (o que é considerado bom, responsável, vergonhoso ou desejável)",
+
+        // Contexto Material & Tecnológico
+        technology_media_use: "Uso de Tecnologia & Media (partilha de telemóveis, preferência por plataformas, limitações de dados, hábitos mediáticos)",
+        transport_mobility: "Transporte & Mobilidade (formas de deslocação, normas de viagem, limitações de acesso)",
+        household_resources_tools: "Recursos & Ferramentas Domésticas (eletrodomésticos, utensílios de cozinha, armazenamento, acesso a água/eletricidade)",
+
+        // Comunicação, Afeto & Expressão
+        communication_style: "Estilo de Comunicação (diretividade, estratégias de cortesia, humor, discurso indireto)",
+        emotional_expression_norms: "Normas de Expressão Emocional (emoções expressas, contidas ou mantidas em privado)",
+        storytelling_narrative_forms: "Formas Narrativas & de Contar Histórias (histórias pessoais, aconselhamento, uso de metáforas)",
+
+        // Normas, Restrições & Ausências
+        social_norms_taboo: "Normas Sociais & Tabus (tópicos evitados, comportamentos proibidos, eufemismos)",
+        institutional_trust_relations: "Relação com Instituições & Confiança Institucional (atitudes face ao governo, clínicas, ONGs, autoridades)",
+        silence_implicit_knowledge: "Silêncio & Conhecimento Implícito (conhecimento assumido, omissões, o que fica por dizer)",
+
 
         image_issue: "Problema de Imagem",
         image_culture_marker: "Marcador Cultural de Imagem",

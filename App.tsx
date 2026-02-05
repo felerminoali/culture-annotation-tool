@@ -83,7 +83,6 @@ const App: React.FC = () => {
   const [editingTextAnnotation, setEditingTextAnnotation] = useState<Annotation | null>(null);
   const [isTextModalOpen, setIsTextModalOpen] = useState(false);
   const [isIssueModalOpen, setIsIssueModalOpen] = useState(false);
-  const [isTypeSelectorOpen, setIsTypeSelectorOpen] = useState(false);
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const [isImageIssueModalOpen, setIsImageIssueModalOpen] = useState(false);
   const [activeImageIdx, setActiveImageIdx] = useState<number | null>(null);
@@ -184,7 +183,7 @@ const App: React.FC = () => {
                 : 'bg-white text-slate-400 border-slate-100 hover:border-slate-200 hover:bg-slate-50'
                 }`}
             >
-              {t(`${opt}_label` as any, language)}
+              {t(`${opt}` as any, language)}
             </button>
           ))}
         </div>
@@ -216,19 +215,19 @@ const App: React.FC = () => {
         <table className="w-full border-collapse">
           <thead>
             <tr className="border-b border-slate-100 bg-slate-100/30">
-              <th className="px-8 py-4 text-left text-[10px] font-black uppercase text-slate-400 tracking-widest">Feedback Item</th>
-              <th className="px-8 py-4 text-center text-[10px] font-black uppercase text-slate-400 tracking-widest whitespace-nowrap">Yes / No</th>
+              <th className="px-8 py-2 text-left text-[10px] font-black uppercase text-slate-400 tracking-widest">{t('feedback_item', language)}</th>
+              <th className="px-8 py-2 text-center text-[10px] font-black uppercase text-slate-400 tracking-widest whitespace-nowrap"> {t('yes_no', language)}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {feedbackKeys.map((key) => (
               <tr key={key} className="hover:bg-white transition-all group">
-                <td className="px-8 py-5">
+                <td className="px-8 py-2">
                   <span className="text-[11px] font-bold text-slate-700 leading-snug group-hover:text-indigo-600 transition-colors">
                     {t(key as any, language)}
                   </span>
                 </td>
-                <td className="px-8 py-5 text-center">
+                <td className="px-8 py-2 text-center">
                   <button
                     onClick={() => setGlobalFeedback(prev => ({ ...prev, [key]: !globalFeedback[key as keyof typeof globalFeedback] }))}
                     className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all shadow-sm mx-auto border-2 ${globalFeedback[key as keyof typeof globalFeedback] === true
@@ -1179,38 +1178,11 @@ const App: React.FC = () => {
       setActiveImageIdx(null);
 
       setCurrentSelection(s);
-      setIsTypeSelectorOpen(true);
-    }
-  };
-
-  const handleImageChooseType = (subtype: 'culture' | 'issue') => {
-    setIsTypeSelectorOpen(false);
-    if (subtype === 'culture') {
-      setIsImageModalOpen(true);
-    } else {
-      setIsImageIssueModalOpen(true);
-    }
-  };
-
-  const handleChooseType = (subtype: 'culture' | 'issue') => {
-    if (pendingPin || editingImageAnno) { // Check if an image annotation is pending or being edited
-      handleImageChooseType(subtype);
-      return;
-    }
-    // Existing text logic
-    if (editingTextAnnotation) {
-      setEditingTextAnnotation({ ...editingTextAnnotation, subtype });
-    } else if (currentSelection) {
-      // Will be handled in save logic
-    }
-
-    setIsTypeSelectorOpen(false);
-    if (subtype === 'culture') {
       setIsTextModalOpen(true);
-    } else {
-      setIsIssueModalOpen(true);
     }
   };
+
+
 
   const handleEditHighlight = (anno: Annotation) => {
     setEditingTextAnnotation(anno);
@@ -1356,7 +1328,7 @@ const App: React.FC = () => {
 
     setPendingPin({ x, y, width, height, shapeType });
     setEditingImageAnno(null);
-    setIsTypeSelectorOpen(true);
+    setIsImageModalOpen(true);
   };
 
   const handleEditPin = (paraIdx: number, anno: ImageAnnotation) => {
@@ -1405,7 +1377,7 @@ const App: React.FC = () => {
         isSupported: data.isSupported || 'na',
         supportedJustification: data.supportedJustification || '',
         cultureProxy: data.cultureProxy || '',
-        subtype: data.subtype,
+        subtype: data.subtype || 'culture',
         issueCategory: data.issueCategory,
         issueDescription: data.issueDescription,
       };
@@ -2087,6 +2059,7 @@ const App: React.FC = () => {
                   </div>
 
                   {/* LANGUAGE SIMILARITY QUESTION */}
+                  {/*
                   <div className="pt-32 pb-16 max-w-4xl mx-auto">
                     <div className="bg-white rounded-[4rem] border border-slate-100 shadow-2xl p-16 space-y-12 animate-in slide-in-from-bottom-8">
                       <div className="text-center space-y-4">
@@ -2129,27 +2102,33 @@ const App: React.FC = () => {
                             />
                           </div>
                         )}
-
-                        <div className="pt-8 border-t border-slate-50">
-                          <div className="text-center mb-10">
-                            <h4 className="text-xl font-black text-slate-900 italic tracking-tight mb-2">Overall Task Feedback</h4>
-                            <p className="text-slate-400 font-bold uppercase tracking-widest text-[9px]">Please answer the following global questions about the story and images</p>
-                          </div>
-                          <GlobalFeedbackToggles />
                         </div>
+                      </div>
+                    </div>
+                  </div>
+                  */}
 
-                        <div className="pt-8 border-t border-slate-50">
-                          <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 px-4">
-                            General Comment
-                          </label>
-                          <textarea
-                            className="w-full p-8 bg-slate-50 border border-slate-100 rounded-[2.5rem] font-medium text-slate-700 focus:ring-4 focus:ring-indigo-100 outline-none transition-all"
-                            rows={3}
-                            placeholder="Add any general comments about this task..."
-                            value={generalComment}
-                            onChange={(e) => setGeneralComment(e.target.value)}
-                          />
+                  <div className="pt-32 pb-16 max-w-4xl mx-auto">
+                    <div className="bg-white rounded-[4rem] border border-slate-100 shadow-2xl p-16 space-y-12 animate-in slide-in-from-bottom-8">
+                      <div className="pt-8 border-t border-slate-50">
+                        <div className="text-center mb-10">
+                          <h4 className="text-xl font-black text-slate-900 italic tracking-tight">Overall Task Feedback</h4>
+                          <p className="text-slate-400 font-bold uppercase tracking-widest text-[9px]">Please answer the following global questions about the story and images</p>
                         </div>
+                        <GlobalFeedbackToggles />
+                      </div>
+
+                      <div className="pt-8 border-t border-slate-50">
+                        <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 px-4">
+                          General Comment
+                        </label>
+                        <textarea
+                          className="w-full p-8 bg-slate-50 border border-slate-100 rounded-[2.5rem] font-medium text-slate-700 focus:ring-4 focus:ring-indigo-100 outline-none transition-all"
+                          rows={3}
+                          placeholder="Add any general comments about this task..."
+                          value={generalComment}
+                          onChange={(e) => setGeneralComment(e.target.value)}
+                        />
                       </div>
                     </div>
                   </div>
@@ -2302,46 +2281,7 @@ const App: React.FC = () => {
         editingAnnotation={editingTextAnnotation}
         language={language}
       />
-      {/* TYPE SELECTOR MODAL */}
-      {
-        isTypeSelectorOpen && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-            <div className="bg-white rounded-[2rem] shadow-2xl p-8 w-full max-w-sm transform animate-in zoom-in-95 duration-200 border border-slate-100">
-              <h3 className="text-lg font-black text-slate-900 text-center mb-6 italic">{t('select_category', language)}</h3>
-              <div className="space-y-4">
-                <button
-                  onClick={() => handleChooseType('culture')}
-                  className="w-full py-6 bg-indigo-50 border-2 border-indigo-100 rounded-2xl flex flex-col items-center hover:bg-indigo-100 hover:border-indigo-300 transition-all group"
-                >
-                  <i className="fa-solid fa-earth-americas text-2xl text-indigo-600 mb-2 group-hover:scale-110 transition-transform"></i>
-                  <span className="text-xs font-black uppercase tracking-widest text-indigo-900">{t('culture_marker', language)}</span>
-                </button>
-                <button
-                  onClick={() => handleChooseType('issue')}
-                  className="w-full py-6 bg-red-50 border-2 border-red-100 rounded-2xl flex flex-col items-center hover:bg-red-100 hover:border-red-300 transition-all group"
-                >
-                  <i className="fa-solid fa-circle-exclamation text-2xl text-red-600 mb-2 group-hover:scale-110 transition-transform"></i>
-                  <span className="text-xs font-black uppercase tracking-widest text-red-900">
-                    {(pendingPin || editingImageAnno) ? t('image_issue', language) : t('text_issue', language)}
-                  </span>
-                </button>
-              </div>
-              <button
-                onClick={() => {
-                  setIsTypeSelectorOpen(false);
-                  setCurrentSelection(null);
-                  setPendingPin(null);
-                  setEditingImageAnno(null);
-                  setEditingTextAnnotation(null);
-                }}
-                className="w-full mt-6 py-3 text-slate-400 text-[10px] font-black uppercase tracking-widest hover:text-slate-600 transition-colors"
-              >
-                {t('cancel', language)}
-              </button>
-            </div>
-          </div>
-        )
-      }
+
       <ImageAnnotationModal
         isOpen={isImageModalOpen}
         onClose={() => { setIsImageModalOpen(false); setPendingPin(null); setEditingImageAnno(null); }}
