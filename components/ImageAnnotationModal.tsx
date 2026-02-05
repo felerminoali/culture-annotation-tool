@@ -27,6 +27,8 @@ const ImageAnnotationModal: React.FC<ImageAnnotationModalProps> = ({
   const [cultureProxy, setCultureProxy] = useState('');
   const [comment, setComment] = useState('');
   const [customCultureProxy, setCustomCultureProxy] = useState('');
+  const [rating, setRating] = useState(0);
+  const [showGuidelines, setShowGuidelines] = useState(false);
 
   const proxyOptions = [
     'language_local_expression',
@@ -50,6 +52,7 @@ const ImageAnnotationModal: React.FC<ImageAnnotationModalProps> = ({
         setSupportedJustification(existingAnnotation.supportedJustification || '');
         setShapeType(existingAnnotation.shapeType || 'rect');
         setComment(existingAnnotation.comment || '');
+        setRating(existingAnnotation.rating || 0);
 
         // Handle custom proxy
         if (existingAnnotation.cultureProxy && !proxyOptions.includes(existingAnnotation.cultureProxy)) {
@@ -68,6 +71,7 @@ const ImageAnnotationModal: React.FC<ImageAnnotationModalProps> = ({
         setCultureProxy('');
         setCustomCultureProxy('');
         setComment('');
+        setRating(0);
       }
     }
   }, [isOpen, existingAnnotation]);
@@ -189,6 +193,25 @@ const ImageAnnotationModal: React.FC<ImageAnnotationModalProps> = ({
               )}
             </section>
 
+            {/* Rating Section */}
+            <section className="space-y-3 pt-4 border-t border-gray-100">
+              <label className="block text-xs font-black text-slate-400 uppercase tracking-widest flex items-center">
+                <i className="fa-solid fa-star mr-2 text-amber-500"></i> {t('rating_label', language)}
+              </label>
+              <div className="flex space-x-4 justify-center py-2">
+                {[1, 2, 3].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => setRating(star)}
+                    className="transition-transform active:scale-90"
+                  >
+                    <i className={`fa-star text-3xl transition-all ${rating >= star ? 'fa-solid text-amber-400' : 'fa-regular text-slate-200 hover:text-amber-200'}`}></i>
+                  </button>
+                ))}
+              </div>
+            </section>
+
             {/* Comment Section */}
             <section className="space-y-2 pt-4 border-t border-gray-100">
               <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">{t('comment_label', language)}</label>
@@ -219,9 +242,10 @@ const ImageAnnotationModal: React.FC<ImageAnnotationModalProps> = ({
               supportedJustification,
               shapeType,
               cultureProxy: cultureProxy === 'other' ? customCultureProxy : cultureProxy, // Use custom proxy if "other" selected
-              comment
+              comment,
+              rating
             })}
-            disabled={!description || !cultureProxy || (cultureProxy === 'other' && !customCultureProxy)}
+            disabled={!description || !cultureProxy || (cultureProxy === 'other' && !customCultureProxy) || rating === 0}
             className="px-6 py-2 border-b-4 bg-indigo-600 hover:bg-indigo-700 border-indigo-900 font-bold text-white rounded-lg text-sm transition-all shadow-lg active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {t('save_annotation', language)}

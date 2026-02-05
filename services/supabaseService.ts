@@ -527,9 +527,14 @@ export const saveTaskSubmission = async (
     languageSimilarity: DecisionStatus,
     languageSimilarityJustification: string,
     generalComment: string,
-    completed: boolean = false
+    completed: boolean = false,
+    textConnectness?: Record<number, string>,
+    imageConnectness?: Record<number, string>,
+    globalFeedback?: Partial<UserTaskSubmission>
 ) => {
     if (!supabase) throw new Error('Supabase not initialized');
+
+    const feedbackData = globalFeedback || {};
 
     const { data, error } = await supabase
         .from('task_submissions')
@@ -540,7 +545,24 @@ export const saveTaskSubmission = async (
             language_similarity: languageSimilarity,
             language_similarity_justification: languageSimilarityJustification,
             general_comment: generalComment,
-            completed: completed
+            text_connectness: textConnectness || {},
+            image_connectness: imageConnectness || {},
+            completed: completed,
+            medically_misleading: feedbackData.medically_misleading || false,
+            culture_generic: feedbackData.culture_generic || false,
+            cultural_stereotypical: feedbackData.cultural_stereotypical || false,
+            persona_consistency_strong: feedbackData.persona_consistency_strong || false,
+            persona_consistency_broken: feedbackData.persona_consistency_broken || false,
+            advice_practical: feedbackData.advice_practical || false,
+            advice_vague: feedbackData.advice_vague || false,
+            advice_unrealistic: feedbackData.advice_unrealistic || false,
+            images_match_story: feedbackData.images_match_story || false,
+            images_mismatch_persona: feedbackData.images_mismatch_persona || false,
+            ai_artifacts: feedbackData.ai_artifacts || false,
+            story_engaging: feedbackData.story_engaging || false,
+            story_confusing: feedbackData.story_confusing || false,
+            story_supportive: feedbackData.story_supportive || false,
+            story_tone_inappropriate: feedbackData.story_tone_inappropriate || false,
         }, {
             onConflict: 'task_id,user_id' // Specify composite primary key for upsert
         })
@@ -599,7 +621,24 @@ export const fetchAllUserTaskSubmissions = async (): Promise<UserTaskSubmission[
             language_similarity,
             language_similarity_justification,
             general_comment,
+            text_connectness,
+            image_connectness,
             completed,
+            medically_misleading,
+            culture_generic,
+            cultural_stereotypical,
+            persona_consistency_strong,
+            persona_consistency_broken,
+            advice_practical,
+            advice_vague,
+            advice_unrealistic,
+            images_match_story,
+            images_mismatch_persona,
+            ai_artifacts,
+            story_engaging,
+            story_confusing,
+            story_supportive,
+            story_tone_inappropriate,
             users(email, id)
         `);
 
@@ -616,6 +655,23 @@ export const fetchAllUserTaskSubmissions = async (): Promise<UserTaskSubmission[
         languageSimilarity: s.language_similarity,
         languageSimilarityJustification: s.language_similarity_justification,
         generalComment: s.general_comment || '',
+        text_connectness: s.text_connectness || {},
+        image_connectness: s.image_connectness || {},
+        medically_misleading: s.medically_misleading,
+        culture_generic: s.culture_generic,
+        cultural_stereotypical: s.cultural_stereotypical,
+        persona_consistency_strong: s.persona_consistency_strong,
+        persona_consistency_broken: s.persona_consistency_broken,
+        advice_practical: s.advice_practical,
+        advice_vague: s.advice_vague,
+        advice_unrealistic: s.advice_unrealistic,
+        images_match_story: s.images_match_story,
+        images_mismatch_persona: s.images_mismatch_persona,
+        ai_artifacts: s.ai_artifacts,
+        story_engaging: s.story_engaging,
+        story_confusing: s.story_confusing,
+        story_supportive: s.story_supportive,
+        story_tone_inappropriate: s.story_tone_inappropriate,
         completed: s.completed
     }));
 };
@@ -703,6 +759,7 @@ export const saveAnnotations = async (taskId: string, userId: string, annotation
         is_supported: a.isSupported,
         supported_justification: a.supportedJustification,
         culture_proxy: a.cultureProxy,
+        rating: a.rating,
         annotation_type: a.type,
         subtype: a.subtype,
         issue_category: a.issueCategory,
@@ -748,6 +805,7 @@ export const fetchAnnotations = async (taskId: string, userId: string): Promise<
         isSupported: a.is_supported || 'na',
         supportedJustification: a.supported_justification || '',
         cultureProxy: a.culture_proxy || '',
+        rating: a.rating,
         type: a.annotation_type || 'manual',
         subtype: a.subtype,
         issueCategory: a.issue_category,
@@ -788,6 +846,7 @@ export const fetchAllAnnotations = async (): Promise<Annotation[]> => {
         isSupported: a.is_supported || 'na',
         supportedJustification: a.supported_justification || '',
         cultureProxy: a.culture_proxy || '',
+        rating: a.rating,
         type: a.annotation_type || 'manual',
         subtype: a.subtype,
         issueCategory: a.issue_category,
@@ -830,6 +889,7 @@ export const fetchAnnotationsForTasks = async (taskIds: string[]): Promise<Annot
         isSupported: a.is_supported || 'na',
         supportedJustification: a.supported_justification || '',
         cultureProxy: a.culture_proxy || '',
+        rating: a.rating,
         type: a.annotation_type || 'manual',
         subtype: a.subtype,
         issueCategory: a.issue_category,
@@ -854,6 +914,7 @@ export const updateAnnotation = async (id: string, updates: Partial<Annotation>)
     if (updates.isSupported !== undefined) payload.is_supported = updates.isSupported;
     if (updates.supportedJustification !== undefined) payload.supported_justification = updates.supportedJustification;
     if (updates.cultureProxy !== undefined) payload.culture_proxy = updates.cultureProxy;
+    if (updates.rating !== undefined) payload.rating = updates.rating;
     if (updates.issueCategory !== undefined) payload.issue_category = updates.issueCategory;
     if (updates.issueDescription !== undefined) payload.issue_description = updates.issueDescription;
     payload.created_at = new Date(Date.now()).toISOString(); // Update timestamp
@@ -921,6 +982,7 @@ export const saveImageAnnotations = async (taskId: string, userId: string, image
             is_supported: a.isSupported,
             supported_justification: a.supportedJustification,
             culture_proxy: a.cultureProxy,
+            rating: a.rating,
             subtype: a.subtype,
             issue_category: a.issueCategory,
             issue_description: a.issueDescription,
@@ -973,6 +1035,7 @@ export const saveImageAnnotationsFlat = async (taskId: string, userId: string, i
         is_supported: a.isSupported,
         supported_justification: a.supportedJustification,
         culture_proxy: a.cultureProxy,
+        rating: a.rating,
         subtype: a.subtype,
         issue_category: a.issueCategory,
         issue_description: a.issueDescription,
@@ -1030,6 +1093,7 @@ export const fetchImageAnnotations = async (taskId: string, userId: string): Pro
             isSupported: a.is_supported || 'na',
             supportedJustification: a.supported_justification,
             cultureProxy: a.culture_proxy,
+            rating: a.rating,
             subtype: a.subtype,
             issueCategory: a.issue_category,
             issueDescription: a.issue_description,
@@ -1079,6 +1143,7 @@ export const fetchImageAnnotationsForTasks = async (taskIds: string[]): Promise<
         isSupported: a.is_supported || 'na',
         supportedJustification: a.supported_justification,
         cultureProxy: a.culture_proxy,
+        rating: a.rating,
         subtype: a.subtype,
         issueCategory: a.issue_category,
         issueDescription: a.issue_description,

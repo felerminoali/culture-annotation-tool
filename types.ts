@@ -4,130 +4,149 @@ export type UserRole = 'admin' | 'annotator';
 export type Language = 'en' | 'pt';
 
 export interface User {
-  id?: string; // Add ID for Supabase
-  name: string;
-  email: string;
-  role: UserRole;
-  password?: string;
+    id?: string; // Add ID for Supabase
+    name: string;
+    email: string;
+    role: UserRole;
+    password?: string;
 }
 
 export type AnnotationSubtype = 'culture' | 'issue';
 
 export interface Annotation {
-  id: string;
-  start: number;
-  end: number;
-  text: string;
-  comment: string;
-  isImportant: boolean;
-  type: 'manual' | 'ai';
-  subtype?: AnnotationSubtype;
-  issueCategory?: string;
-  issueDescription?: string;
-  timestamp: number;
-  userEmail?: string; // Track who made it
-  userId?: string; // Supabase user ID
-  taskId?: string;
-  submissionTaskId?: string; // New: References task_submissions composite key
-  submissionUserId?: string; // New: References task_submissions composite key
-  isRelevant?: DecisionStatus;
-  relevantJustification?: string;
-  isSupported?: DecisionStatus;
-  supportedJustification?: string;
-  cultureProxy?: string;
+    id: string;
+    start: number;
+    end: number;
+    text: string;
+    comment: string;
+    isImportant: boolean;
+    type: 'manual' | 'ai';
+    subtype?: AnnotationSubtype;
+    issueCategory?: string;
+    issueDescription?: string;
+    timestamp: number;
+    userEmail?: string; // Track who made it
+    userId?: string; // Supabase user ID
+    taskId?: string;
+    submissionTaskId?: string; // New: References task_submissions composite key
+    submissionUserId?: string; // New: References task_submissions composite key
+    isRelevant?: DecisionStatus;
+    relevantJustification?: string;
+    isSupported?: DecisionStatus;
+    supportedJustification?: string;
+    cultureProxy?: string;
+    rating?: number;
 }
 
 export interface TaskData {
-  annotations: Annotation[];
-  imageAnnotations: Record<string, ImageAnnotation[]>;
-  culturalScore: number;
-  languageSimilarity: DecisionStatus;
-  languageSimilarityJustification: string;
+    annotations: Annotation[];
+    imageAnnotations: Record<string, ImageAnnotation[]>;
+    culturalScore: number;
+    languageSimilarity: DecisionStatus;
+    languageSimilarityJustification: string;
 }
 
 export type DecisionStatus = 'yes' | 'no' | 'na';
 export type ShapeType = 'rect' | 'circle';
 
 export interface ImageAnnotation {
-  id: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  shapeType: ShapeType;
-  description: string;
-  comment: string;
-  isPresent: DecisionStatus; // Retain if needed for other image annotation types, removed from modal but still in type
-  presentJustification?: string; // Retain if needed
-  isRelevant: DecisionStatus;
-  relevantJustification?: string;
-  isSupported?: DecisionStatus;
-  supportedJustification?: string;
-  subtype?: AnnotationSubtype;
-  issueCategory?: string;
-  issueDescription?: string;
-  cultureProxy?: string;
-  timestamp: number;
-  userEmail?: string;
-  userId?: string; // Supabase user ID
-  taskId?: string;
-  submissionTaskId?: string; // New: References task_submissions composite key
-  submissionUserId?: string; // New: References task_submissions composite key
-  paragraph_index?: number; // Add paragraph_index to ImageAnnotation
+    id: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    shapeType: ShapeType;
+    description: string;
+    comment: string;
+    isPresent: DecisionStatus; // Retain if needed for other image annotation types, removed from modal but still in type
+    presentJustification?: string; // Retain if needed
+    isRelevant: DecisionStatus;
+    relevantJustification?: string;
+    isSupported?: DecisionStatus;
+    supportedJustification?: string;
+    subtype?: AnnotationSubtype;
+    issueCategory?: string;
+    issueDescription?: string;
+    cultureProxy?: string;
+    timestamp: number;
+    userEmail?: string;
+    userId?: string; // Supabase user ID
+    taskId?: string;
+    submissionTaskId?: string; // New: References task_submissions composite key
+    submissionUserId?: string; // New: References task_submissions composite key
+    paragraph_index?: number; // Add paragraph_index to ImageAnnotation
+    rating?: number;
 }
 
 export interface SelectionState {
-  start: number;
-  end: number;
-  text: string;
+    start: number;
+    end: number;
+    text: string;
 }
 
 export interface TaskAssignment {
-  id?: string; // Supabase ID
-  taskId: string;
-  assignedToEmail: string; // "all" or specific email
-  userId?: string; // Supabase user ID
+    id?: string; // Supabase ID
+    taskId: string;
+    assignedToEmail: string; // "all" or specific email
+    userId?: string; // Supabase user ID
 }
 
 export interface Project {
-  id: string;
-  title: string;
-  description: string;
-  guideline?: string;
-  createdAt: number;
+    id: string;
+    title: string;
+    description: string;
+    guideline?: string;
+    createdAt: number;
 }
 
 export interface Task {
-  id: string;
-  title: string;
-  objective: string;
-  description: string;
-  text: string;
-  images: string[];
-  audio?: string[]; // New: Audio URLs
-  projectId?: string;
-  question?: string; // New: Task-specific question
-  category?: 'diet' | 'exercise'; // New: Task category
-  gender?: 'male' | 'female' | 'other'; // New: Persona gender
-  taskType?: 'independent' | 'overlapped' | 'control' | 'consistency'; // New: Task type for agreement calculation
-  metadata?: Record<string, any>; // New: JSON structured metadata
+    id: string;
+    title: string;
+    objective: string;
+    description: string;
+    text: string;
+    images: string[];
+    audio?: string[]; // New: Audio URLs
+    projectId?: string;
+    question?: string; // New: Task-specific question
+    category?: 'diet' | 'exercise'; // New: Task category
+    gender?: 'male' | 'female' | 'other'; // New: Persona gender
+    taskType?: 'independent' | 'overlapped' | 'control' | 'consistency'; // New: Task type for agreement calculation
+    metadata?: Record<string, any>; // New: JSON structured metadata
 }
 
 export interface ProjectAssignment {
-  id?: string; // Supabase ID
-  projectId: string;
-  assignedToEmail: string;
-  userId?: string; // Supabase user ID
+    id?: string; // Supabase ID
+    projectId: string;
+    assignedToEmail: string;
+    userId?: string; // Supabase user ID
 }
 
 // Interface for fetching submission data for agreement calculation
 export interface UserTaskSubmission {
-  taskId: string;
-  userEmail: string;
-  userId: string;
-  culturalScore: number;
-  languageSimilarity?: DecisionStatus; // Added for Admin Dashboard
-  languageSimilarityJustification?: string; // Added for Admin Dashboard
-  generalComment?: string; // General comment for the task
-  completed: boolean; // Indicates if a submission exists for this task/user
+    taskId: string;
+    userEmail: string;
+    userId: string;
+    culturalScore: number;
+    languageSimilarity?: DecisionStatus; // Added for Admin Dashboard
+    languageSimilarityJustification?: string; // Added for Admin Dashboard
+    generalComment?: string; // General comment for the task
+    text_connectness?: Record<number, string>; // New: JSON for paragraph connectedness
+    image_connectness?: Record<number, string>; // New: JSON for image connectedness
+    medically_misleading?: boolean;
+    culture_generic?: boolean;
+    cultural_stereotypical?: boolean;
+    persona_consistency_strong?: boolean;
+    persona_consistency_broken?: boolean;
+    advice_practical?: boolean;
+    advice_vague?: boolean;
+    advice_unrealistic?: boolean;
+    images_match_story?: boolean;
+    images_mismatch_persona?: boolean;
+    ai_artifacts?: boolean;
+    story_engaging?: boolean;
+    story_confusing?: boolean;
+    story_supportive?: boolean;
+    story_tone_inappropriate?: boolean;
+    completed: boolean; // Indicates if a submission exists for this task/user
 }

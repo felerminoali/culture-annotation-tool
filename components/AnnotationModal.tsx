@@ -13,7 +13,8 @@ interface AnnotationModalProps {
     relevantJustification: string,
     isSupported: DecisionStatus,
     supportedJustification: string,
-    cultureProxy: string
+    cultureProxy: string,
+    rating: number
   ) => void;
   selection: SelectionState | null;
   editingAnnotation?: Annotation | null;
@@ -39,6 +40,7 @@ const AnnotationModal: React.FC<AnnotationModalProps> = ({
   const [supportedJustification, setSupportedJustification] = useState('');
   const [cultureProxy, setCultureProxy] = useState('');
   const [customCultureProxy, setCustomCultureProxy] = useState('');
+  const [rating, setRating] = useState(0);
 
   const proxyOptions = [
     'language_local_expression',
@@ -72,6 +74,7 @@ const AnnotationModal: React.FC<AnnotationModalProps> = ({
           setCultureProxy('');
           setCustomCultureProxy('');
         }
+        setRating(editingAnnotation.rating || 0);
       } else {
         setComment('');
         setIsImportant(false);
@@ -81,6 +84,7 @@ const AnnotationModal: React.FC<AnnotationModalProps> = ({
         setSupportedJustification('');
         setCultureProxy('');
         setCustomCultureProxy('');
+        setRating(0);
       }
     }
   }, [isOpen, editingAnnotation]);
@@ -126,7 +130,7 @@ const AnnotationModal: React.FC<AnnotationModalProps> = ({
 
   const handleSave = () => {
     const finalProxy = cultureProxy === 'other' ? customCultureProxy : cultureProxy;
-    onSave(comment, isImportant, isRelevant, relevantJustification, isSupported, supportedJustification, finalProxy);
+    onSave(comment, isImportant, isRelevant, relevantJustification, isSupported, supportedJustification, finalProxy, rating);
   };
 
   return (
@@ -282,6 +286,25 @@ const AnnotationModal: React.FC<AnnotationModalProps> = ({
             )}
           </section>
 
+          {/* 4. Rating Section */}
+          <div className="pt-4 border-t border-slate-100">
+            <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center">
+              <i className="fa-solid fa-star mr-2 text-amber-500"></i> {t('rating_label', language)}
+            </label>
+            <div className="flex space-x-4 justify-center py-2">
+              {[1, 2, 3].map((star) => (
+                <button
+                  key={star}
+                  type="button"
+                  onClick={() => setRating(star)}
+                  className="transition-transform active:scale-90"
+                >
+                  <i className={`fa-star text-3xl transition-all ${rating >= star ? 'fa-solid text-amber-400' : 'fa-regular text-slate-200 hover:text-amber-200'}`}></i>
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* 4. Comment Section */}
           <div className="pt-4 border-t border-slate-100">
             <label htmlFor="comment" className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center">
@@ -308,7 +331,7 @@ const AnnotationModal: React.FC<AnnotationModalProps> = ({
           </button>
           <button
             onClick={handleSave}
-            disabled={isSupported === 'na' || isRelevant === 'na' || !cultureProxy || (cultureProxy === 'other' && !customCultureProxy)}
+            disabled={isSupported === 'na' || isRelevant === 'na' || !cultureProxy || (cultureProxy === 'other' && !customCultureProxy) || rating === 0}
             className={`px-10 py-3 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-xl transition-all active:scale-95 border-b-4 ${editingAnnotation ? 'bg-indigo-600 hover:bg-indigo-700 border-indigo-900' : 'bg-slate-900 hover:bg-slate-800 border-slate-700'} disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none`}
           >
             {editingAnnotation ? t('push_updates', language) : t('submit', language)}

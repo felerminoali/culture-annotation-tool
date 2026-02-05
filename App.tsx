@@ -57,6 +57,25 @@ const App: React.FC = () => {
   const [languageSimilarity, setLanguageSimilarity] = useState<DecisionStatus>('na');
   const [languageSimilarityJustification, setLanguageSimilarityJustification] = useState<string>('');
   const [generalComment, setGeneralComment] = useState<string>('');
+  const [textConnectness, setTextConnectness] = useState<Record<number, string>>({});
+  const [imageConnectness, setImageConnectness] = useState<Record<number, string>>({});
+  const [globalFeedback, setGlobalFeedback] = useState<Partial<UserTaskSubmission>>({
+    medically_misleading: false,
+    culture_generic: false,
+    cultural_stereotypical: false,
+    persona_consistency_strong: false,
+    persona_consistency_broken: false,
+    advice_practical: false,
+    advice_vague: false,
+    advice_unrealistic: false,
+    images_match_story: false,
+    images_mismatch_persona: false,
+    ai_artifacts: false,
+    story_engaging: false,
+    story_confusing: false,
+    story_supportive: false,
+    story_tone_inappropriate: false,
+  });
 
   // UI Modal State
   const [currentSelection, setCurrentSelection] = useState<SelectionState | null>(null);
@@ -144,6 +163,89 @@ const App: React.FC = () => {
     });
     return result;
   }, [currentTask]);
+
+  const ConnectednessButtons = ({ type, index, state, setState }: { type: 'text' | 'image', index: number, state: Record<number, string>, setState: (val: Record<number, string>) => void }) => {
+    const value = state[index] || '';
+    const options = ['true', 'false', 'unsure'];
+
+    return (
+      <div className="mt-4 p-6 bg-white border border-slate-100 rounded-3xl shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-500">
+        <label className="block text-xs font-black text-slate-700 italic mb-4">
+          <i className="fa-solid fa-hand-holding-heart mr-2 text-indigo-500"></i>
+          {type === 'text' ? t('text_connectedness_question', language) : t('image_connectedness_question', language)}
+        </label>
+        <div className="flex space-x-3">
+          {options.map((opt) => (
+            <button
+              key={opt}
+              onClick={() => setState({ ...state, [index]: opt })}
+              className={`flex-1 py-3 px-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border ${value === opt
+                ? 'bg-slate-900 text-white border-slate-900 shadow-lg scale-[1.02]'
+                : 'bg-white text-slate-400 border-slate-100 hover:border-slate-200 hover:bg-slate-50'
+                }`}
+            >
+              {t(`${opt}_label` as any, language)}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const GlobalFeedbackToggles = () => {
+    const feedbackKeys: (keyof UserTaskSubmission)[] = [
+      'medically_misleading',
+      'culture_generic',
+      'cultural_stereotypical',
+      'persona_consistency_strong',
+      'persona_consistency_broken',
+      'advice_practical',
+      'advice_vague',
+      'advice_unrealistic',
+      'images_match_story',
+      'images_mismatch_persona',
+      'ai_artifacts',
+      'story_engaging',
+      'story_confusing',
+      'story_supportive',
+      'story_tone_inappropriate'
+    ];
+
+    return (
+      <div className="bg-slate-50/50 rounded-[2.5rem] border border-slate-100 overflow-hidden">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="border-b border-slate-100 bg-slate-100/30">
+              <th className="px-8 py-4 text-left text-[10px] font-black uppercase text-slate-400 tracking-widest">Feedback Item</th>
+              <th className="px-8 py-4 text-center text-[10px] font-black uppercase text-slate-400 tracking-widest whitespace-nowrap">Yes / No</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {feedbackKeys.map((key) => (
+              <tr key={key} className="hover:bg-white transition-all group">
+                <td className="px-8 py-5">
+                  <span className="text-[11px] font-bold text-slate-700 leading-snug group-hover:text-indigo-600 transition-colors">
+                    {t(key as any, language)}
+                  </span>
+                </td>
+                <td className="px-8 py-5 text-center">
+                  <button
+                    onClick={() => setGlobalFeedback(prev => ({ ...prev, [key]: !globalFeedback[key as keyof typeof globalFeedback] }))}
+                    className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all shadow-sm mx-auto border-2 ${globalFeedback[key as keyof typeof globalFeedback] === true
+                      ? 'bg-indigo-600 border-indigo-600 text-white rotate-0'
+                      : 'bg-white border-slate-200 text-slate-200 hover:border-indigo-200'
+                      }`}
+                  >
+                    <i className={`fa-solid fa-check transition-all duration-300 ${globalFeedback[key as keyof typeof globalFeedback] === true ? 'scale-110 opacity-100' : 'scale-75 opacity-0'}`}></i>
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
 
   const controlStats = useMemo(() => {
     if (!currentUser) return { percent: 0, show: false, empty: true };
@@ -352,12 +454,49 @@ const App: React.FC = () => {
           setCulturalScore(submission.cultural_score || 0);
           setLanguageSimilarity(submission.language_similarity || 'na');
           setLanguageSimilarityJustification(submission.language_similarity_justification || '');
-          setGeneralComment(submission.general_comment || '');
+          setTextConnectness(submission.text_connectness || {});
+          setImageConnectness(submission.image_connectness || {});
+          setGlobalFeedback({
+            medically_misleading: submission.medically_misleading || false,
+            culture_generic: submission.culture_generic || false,
+            cultural_stereotypical: submission.cultural_stereotypical || false,
+            persona_consistency_strong: submission.persona_consistency_strong || false,
+            persona_consistency_broken: submission.persona_consistency_broken || false,
+            advice_practical: submission.advice_practical || false,
+            advice_vague: submission.advice_vague || false,
+            advice_unrealistic: submission.advice_unrealistic || false,
+            images_match_story: submission.images_match_story || false,
+            images_mismatch_persona: submission.images_mismatch_persona || false,
+            ai_artifacts: submission.ai_artifacts || false,
+            story_engaging: submission.story_engaging || false,
+            story_confusing: submission.story_confusing || false,
+            story_supportive: submission.story_supportive || false,
+            story_tone_inappropriate: submission.story_tone_inappropriate || false,
+          });
         } else {
           setCulturalScore(0);
           setLanguageSimilarity('na');
           setLanguageSimilarityJustification('');
           setGeneralComment('');
+          setTextConnectness({});
+          setImageConnectness({});
+          setGlobalFeedback({
+            medically_misleading: false,
+            culture_generic: false,
+            cultural_stereotypical: false,
+            persona_consistency_strong: false,
+            persona_consistency_broken: false,
+            advice_practical: false,
+            advice_vague: false,
+            advice_unrealistic: false,
+            images_match_story: false,
+            images_mismatch_persona: false,
+            ai_artifacts: false,
+            story_engaging: false,
+            story_confusing: false,
+            story_supportive: false,
+            story_tone_inappropriate: false,
+          });
         }
       } catch (error) {
         if (!isMounted.current) return; // Only log if still mounted
@@ -394,7 +533,10 @@ const App: React.FC = () => {
           languageSimilarity,
           languageSimilarityJustification,
           generalComment,
-          isTaskSubmitted // Pass the current submission status
+          isTaskSubmitted, // Pass the current submission status
+          textConnectness,
+          imageConnectness,
+          globalFeedback
         );
         await supabaseService.saveAnnotations(currentTask.id, currentUser.id!, annotations);
         await supabaseService.saveImageAnnotations(currentTask.id, currentUser.id!, imageAnnotations);
@@ -410,7 +552,7 @@ const App: React.FC = () => {
     }, 1000); // Debounce saves by 1 second
 
     return () => clearTimeout(timer);
-  }, [annotations, imageAnnotations, culturalScore, languageSimilarity, languageSimilarityJustification,
+  }, [annotations, imageAnnotations, culturalScore, languageSimilarity, languageSimilarityJustification, generalComment, textConnectness, imageConnectness, globalFeedback,
     isAuthenticated, currentUser, currentTask?.id, isTaskSubmitted]); // Add isTaskSubmitted to dependencies
 
   useEffect(() => {
@@ -843,10 +985,17 @@ const App: React.FC = () => {
         setAnnotations(userAnnotations);
         setImageAnnotations(userImageAnnotations);
         if (userSubmission) {
-          setCulturalScore(userSubmission.cultural_score || 0);
-          setLanguageSimilarity(userSubmission.language_similarity || 'na');
           setLanguageSimilarityJustification(userSubmission.language_similarity_justification || '');
           setGeneralComment(userSubmission.general_comment || '');
+          setTextConnectness(userSubmission.text_connectness || {});
+          setImageConnectness(userSubmission.image_connectness || {});
+        } else {
+          setCulturalScore(0);
+          setLanguageSimilarity('na');
+          setLanguageSimilarityJustification('');
+          setGeneralComment('');
+          setTextConnectness({});
+          setImageConnectness({});
         }
       }
 
@@ -1080,7 +1229,8 @@ const App: React.FC = () => {
     relevantJustification: string,
     isSupported: DecisionStatus,
     supportedJustification: string,
-    cultureProxy: string
+    cultureProxy: string,
+    rating: number
   ) => {
     if (!currentTask || !currentUser?.id) return;
     setIsTextModalOpen(false); // Close modal early to avoid double renders
@@ -1097,6 +1247,7 @@ const App: React.FC = () => {
         isSupported,
         supportedJustification,
         cultureProxy,
+        rating,
         timestamp: Date.now()
       } : a);
     } else if (currentSelection) {
@@ -1110,6 +1261,7 @@ const App: React.FC = () => {
         isSupported,
         supportedJustification,
         cultureProxy,
+        rating,
         type: 'manual',
         timestamp: Date.now(),
         userEmail: currentUser?.email,
@@ -1218,7 +1370,7 @@ const App: React.FC = () => {
     }
   };
 
-  const saveImageAnnotation = async (data: Omit<ImageAnnotation, 'id' | 'x' | 'y' | 'width' | 'height' | 'timestamp' | 'userId' | 'taskId' | 'userEmail' | 'paragraph_index' | 'submissionTaskId' | 'submissionUserId'>) => {
+  const saveImageAnnotation = async (data: Omit<ImageAnnotation, 'id' | 'x' | 'y' | 'width' | 'height' | 'timestamp' | 'userId' | 'taskId' | 'userEmail' | 'paragraph_index' | 'submissionTaskId' | 'submissionUserId'> & { rating: number }) => {
     if (activeImageIdx === null || !currentTask || !currentUser?.id) return;
     const paraIdxKey = activeImageIdx.toString();
     setIsImageModalOpen(false);
@@ -1301,7 +1453,10 @@ const App: React.FC = () => {
         languageSimilarity,
         languageSimilarityJustification,
         generalComment,
-        true // Mark as completed
+        true, // Mark as completed
+        textConnectness,
+        imageConnectness,
+        globalFeedback
       );
       // Re-fetch completed task IDs for the current user
       const updatedCompletedTaskIds = await supabaseService.fetchCompletedTaskIds(currentUser.id);
@@ -1905,7 +2060,12 @@ const App: React.FC = () => {
                             }}
                             onEditAnnotation={a => handleEditHighlight({ ...a, start: a.start + para.offset, end: a.end + para.offset })}
                           />
-
+                          <ConnectednessButtons
+                            type="text"
+                            index={idx}
+                            state={textConnectness}
+                            setState={setTextConnectness}
+                          />
                         </div>
 
                         <div className="lg:sticky lg:top-10">
@@ -1914,6 +2074,12 @@ const App: React.FC = () => {
                             annotations={imageAnnotations[idx.toString()] || []}
                             onAddPin={(x, y, w, h, t) => handleAddPin(idx, x, y, w, h, t)}
                             onEditPin={a => handleEditPin(idx, a)}
+                          />
+                          <ConnectednessButtons
+                            type="image"
+                            index={idx}
+                            state={imageConnectness}
+                            setState={setImageConnectness}
                           />
                         </div>
                       </div>
@@ -1963,6 +2129,14 @@ const App: React.FC = () => {
                             />
                           </div>
                         )}
+
+                        <div className="pt-8 border-t border-slate-50">
+                          <div className="text-center mb-10">
+                            <h4 className="text-xl font-black text-slate-900 italic tracking-tight mb-2">Overall Task Feedback</h4>
+                            <p className="text-slate-400 font-bold uppercase tracking-widest text-[9px]">Please answer the following global questions about the story and images</p>
+                          </div>
+                          <GlobalFeedbackToggles />
+                        </div>
 
                         <div className="pt-8 border-t border-slate-50">
                           <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 px-4">
@@ -2192,6 +2366,7 @@ const App: React.FC = () => {
           supportedJustification: '',
           shapeType: editingImageAnno?.shapeType || pendingPin?.shapeType || 'rect', // Fallback to existing or pending shape
           cultureProxy: '',
+          rating: 0,
         })}
         existingAnnotation={editingImageAnno}
         language={language}
