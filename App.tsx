@@ -797,6 +797,7 @@ const App: React.FC = () => {
         paragraphs,
         paragrah_number: paragraphs.length,
         image_number: t.images?.length || 0,
+        metadata: t.metadata || {}
       };
     });
 
@@ -852,7 +853,26 @@ const App: React.FC = () => {
             culturalScore: taskSubmission?.culturalScore || 0,
             languageSimilarity: taskSubmission?.languageSimilarity || 'na',
             languageSimilarityJustification: taskSubmission?.languageSimilarityJustification || '',
-            generalComment: taskSubmission?.generalComment || ''
+            generalComment: taskSubmission?.generalComment || '',
+            textConnectness: taskSubmission?.text_connectness || {},
+            imageConnectness: taskSubmission?.image_connectness || {},
+            globalFeedback: {
+              medically_misleading: taskSubmission?.medically_misleading || false,
+              culture_generic: taskSubmission?.culture_generic || false,
+              cultural_stereotypical: taskSubmission?.cultural_stereotypical || false,
+              persona_consistency_strong: taskSubmission?.persona_consistency_strong || false,
+              persona_consistency_broken: taskSubmission?.persona_consistency_broken || false,
+              advice_practical: taskSubmission?.advice_practical || false,
+              advice_vague: taskSubmission?.advice_vague || false,
+              advice_unrealistic: taskSubmission?.advice_unrealistic || false,
+              images_match_story: taskSubmission?.images_match_story || false,
+              images_mismatch_persona: taskSubmission?.images_mismatch_persona || false,
+              ai_artifacts: taskSubmission?.ai_artifacts || false,
+              story_engaging: taskSubmission?.story_engaging || false,
+              story_confusing: taskSubmission?.story_confusing || false,
+              story_supportive: taskSubmission?.story_supportive || false,
+              story_tone_inappropriate: taskSubmission?.story_tone_inappropriate || false,
+            }
           };
         }
       });
@@ -917,7 +937,8 @@ const App: React.FC = () => {
           question: t.question || '',
           category: t.category,
           gender: t.gender,
-          taskType: t.taskType || 'independent'
+          taskType: t.taskType || 'independent',
+          metadata: t.metadata || {}
         };
         if (!isValidUuid(t.id)) {
           console.warn(`Invalid UUID found for task ID: "${t.id}". Regenerating to "${taskToUpsert.id}".`);
@@ -954,7 +975,10 @@ const App: React.FC = () => {
             (tData as any).languageSimilarity || 'na',
             (tData as any).languageSimilarityJustification || '',
             (tData as any).generalComment || '',
-            true // Assume tasks with data are completed
+            true, // Assume tasks with data are completed
+            (tData as any).textConnectness || {},
+            (tData as any).imageConnectness || {},
+            (tData as any).globalFeedback || {}
           );
 
           // Save text annotations - pass taskId and userId directly

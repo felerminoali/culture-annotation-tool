@@ -686,7 +686,25 @@ export const fetchSubmissionsForTasks = async (taskIds: string[]): Promise<UserT
             cultural_score,
             language_similarity,
             language_similarity_justification,
+            general_comment,
+            text_connectness,
+            image_connectness,
             completed,
+            medically_misleading,
+            culture_generic,
+            cultural_stereotypical,
+            persona_consistency_strong,
+            persona_consistency_broken,
+            advice_practical,
+            advice_vague,
+            advice_unrealistic,
+            images_match_story,
+            images_mismatch_persona,
+            ai_artifacts,
+            story_engaging,
+            story_confusing,
+            story_supportive,
+            story_tone_inappropriate,
             users(email, id)
         `)
         .in('task_id', taskIds);
@@ -698,11 +716,29 @@ export const fetchSubmissionsForTasks = async (taskIds: string[]): Promise<UserT
 
     return data.map(s => ({
         taskId: s.task_id,
-        userEmail: (s.users as Partial<User> | null)?.email || 'unknown', // Cast to Partial<User> | null
-        userId: (s.users as Partial<User> | null)?.id || 'unknown', // Cast to Partial<User> | null
+        userEmail: (s.users as Partial<User> | null)?.email || 'unknown',
+        userId: (s.users as Partial<User> | null)?.id || 'unknown',
         culturalScore: s.cultural_score,
         languageSimilarity: s.language_similarity,
         languageSimilarityJustification: s.language_similarity_justification,
+        generalComment: s.general_comment || '',
+        text_connectness: s.text_connectness || {},
+        image_connectness: s.image_connectness || {},
+        medically_misleading: s.medically_misleading,
+        culture_generic: s.culture_generic,
+        cultural_stereotypical: s.cultural_stereotypical,
+        persona_consistency_strong: s.persona_consistency_strong,
+        persona_consistency_broken: s.persona_consistency_broken,
+        advice_practical: s.advice_practical,
+        advice_vague: s.advice_vague,
+        advice_unrealistic: s.advice_unrealistic,
+        images_match_story: s.images_match_story,
+        images_mismatch_persona: s.images_mismatch_persona,
+        ai_artifacts: s.ai_artifacts,
+        story_engaging: s.story_engaging,
+        story_confusing: s.story_confusing,
+        story_supportive: s.story_supportive,
+        story_tone_inappropriate: s.story_tone_inappropriate,
         completed: s.completed
     }));
 };
