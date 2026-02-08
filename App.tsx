@@ -903,10 +903,16 @@ const App: React.FC = () => {
 
     try {
       const text_content = await file.text();
-      const data = JSON.parse(text_content);
+      let data;
+      try {
+        data = JSON.parse(text_content);
+      } catch (e) {
+        if (isMounted.current) alert(t("import_error_invalid_json") || "Invalid JSON file");
+        return;
+      }
 
-      if (!data.project || !data.tasks || !data.annotations) {
-        if (isMounted.current) alert("Invalid project file format");
+      if (!data.project || !data.tasks) {
+        if (isMounted.current) alert(t("import_error_missing_data") || "Invalid project file format: missing project or tasks");
         if (isMounted.current) console.error("Import failed: Invalid project file format", data);
         return;
       }
@@ -927,21 +933,21 @@ const App: React.FC = () => {
       setProjects(updatedProjects);
 
       // 2. Create or Update Tasks
-      for (const t of data.tasks) {
+      for (const tTask of data.tasks) {
         const taskToUpsert: Task = {
-          ...t,
-          id: isValidUuid(t.id) ? t.id : generateUuid(),
-          text: t.text || (t.paragraphs && Array.isArray(t.paragraphs) ? t.paragraphs.join('\n\n') : ''),
-          images: t.images || [],
-          audio: t.audio || [],
-          question: t.question || '',
-          category: t.category,
-          gender: t.gender,
-          taskType: t.taskType || 'independent',
-          metadata: t.metadata || {}
+          ...tTask,
+          id: isValidUuid(tTask.id) ? tTask.id : generateUuid(),
+          text: tTask.text || (tTask.paragraphs && Array.isArray(tTask.paragraphs) ? tTask.paragraphs.join('\n\n') : ''),
+          images: tTask.images || [],
+          audio: tTask.audio || [],
+          question: tTask.question || '',
+          category: tTask.category || '',
+          gender: tTask.gender || 'neutral',
+          taskType: tTask.taskType || 'independent',
+          metadata: tTask.metadata || {}
         };
-        if (!isValidUuid(t.id)) {
-          console.warn(`Invalid UUID found for task ID: "${t.id}". Regenerating to "${taskToUpsert.id}".`);
+        if (!isValidUuid(tTask.id)) {
+          console.warn(`Invalid UUID found for task ID: "${tTask.id}". Regenerating to "${taskToUpsert.id}".`);
         }
         await supabaseService.upsertTask(taskToUpsert);
       }
@@ -949,50 +955,45 @@ const App: React.FC = () => {
       if (!isMounted.current) return;
       setTasks(updatedTasks);
 
-      // 3. Create or Update Annotations (Ground Truth) and Submissions
-      for (const userImport of data.annotations) {
-        const { userEmail, userId, completedTaskIds, taskData } = userImport;
-        if (!userEmail || !userId) {
-          console.warn(`Skipping user import due to missing email or ID:`, userImport);
-          continue;
-        }
-
-        for (const taskId of completedTaskIds) {
-          // Ensure a submission exists and mark it as completed (score 0, na for simplicity on import if not specified)
-          await supabaseService.saveTaskSubmission(taskId, userId, 0, 'na', '', '', true); // Explicitly mark as completed
-
-          if (isMounted.current) {
-            setCompletedTaskIds(prev => [...prev, taskId]);
+      // 3. Create or Update Annotations (Optional)
+      if (data.annotations && Array.isArray(data.annotations)) {
+        for (const userImport of data.annotations) {
+          const { userEmail, userId, completedTaskIds, taskData } = userImport;
+          if (!userEmail || !userId) {
+            console.warn(`Skipping user import due to missing email or ID:`, userImport);
+            continue;
           }
-        }
 
-        for (const [taskId, tData] of Object.entries(taskData)) {
-          // Update submission details
-          await supabaseService.saveTaskSubmission(
-            taskId,
-            userId,
-            (tData as any).culturalScore || 0,
-            (tData as any).languageSimilarity || 'na',
-            (tData as any).languageSimilarityJustification || '',
-            (tData as any).generalComment || '',
-            true, // Assume tasks with data are completed
-            (tData as any).textConnectness || {},
-            (tData as any).imageConnectness || {},
-            (tData as any).globalFeedback || {}
-          );
+          for (const taskId of completedTaskIds || []) {
+            await supabaseService.saveTaskSubmission(taskId, userId, 0, 'na', '', '', true);
+            if (isMounted.current) {
+              setCompletedTaskIds(prev => Array.from(new Set([...prev, taskId])));
+            }
+          }
 
-          // Save text annotations - pass taskId and userId directly
-          const incomingAnnos = (tData as any).annotations || [];
-          await supabaseService.saveAnnotations(taskId, userId, incomingAnnos);
+          for (const [taskId, tData] of Object.entries(taskData || {})) {
+            await supabaseService.saveTaskSubmission(
+              taskId,
+              userId,
+              (tData as any).culturalScore || 0,
+              (tData as any).languageSimilarity || 'na',
+              (tData as any).languageSimilarityJustification || '',
+              (tData as any).generalComment || '',
+              true,
+              (tData as any).textConnectness || {},
+              (tData as any).imageConnectness || {},
+              (tData as any).globalFeedback || {}
+            );
 
-          // Save image annotations
-          const incomingImgAnnos = (tData as any).imageAnnotations || {};
-          // Convert incomingImgAnnos (Record<string, any[]>) to a flat array for saveImageAnnotationsFlat
-          const flatIncomingImgAnnos: ImageAnnotation[] = Object.entries(incomingImgAnnos).flatMap(([paraIdx, annos]) =>
-            (annos as any[]).map(a => ({ ...a, paragraph_index: parseInt(paraIdx) }))
-          );
-          // Use saveImageAnnotationsFlat which accepts a flat array
-          await supabaseService.saveImageAnnotationsFlat(taskId, userId, flatIncomingImgAnnos);
+            const incomingAnnos = (tData as any).annotations || [];
+            await supabaseService.saveAnnotations(taskId, userId, incomingAnnos);
+
+            const incomingImgAnnos = (tData as any).imageAnnotations || {};
+            const flatIncomingImgAnnos: ImageAnnotation[] = Object.entries(incomingImgAnnos).flatMap(([paraIdx, annos]) =>
+              (annos as any[]).map(a => ({ ...a, paragraph_index: parseInt(paraIdx) }))
+            );
+            await supabaseService.saveImageAnnotationsFlat(taskId, userId, flatIncomingImgAnnos);
+          }
         }
       }
 
@@ -1004,42 +1005,27 @@ const App: React.FC = () => {
       if (!isMounted.current) return;
       setGlobalLog(updatedAllAnnotations);
       setAllTaskSubmissions(updatedAllSubmissions);
-      setSubmissionUpdateKey(prev => prev + 1); // Increment key after updating global submissions
+      setSubmissionUpdateKey(prev => prev + 1);
 
       if (currentUser) {
-        const [userCompletedTasks, userAnnotations, userImageAnnotations, userSubmission] = await Promise.all([
+        const [userCompletedTasks, userAnnotations, userImageAnnotations] = await Promise.all([
           supabaseService.fetchCompletedTaskIds(currentUser.id!),
-          // Only call fetchAnnotations if currentTask and currentTask.id are present
           currentTask?.id ? supabaseService.fetchAnnotations(currentTask.id, currentUser.id!) : Promise.resolve([]),
-          // Only call fetchImageAnnotations if currentTask and currentTask.id are present
-          currentTask?.id ? supabaseService.fetchImageAnnotations(currentTask.id, currentUser.id!) : Promise.resolve({}),
-          currentTask ? supabaseService.fetchTaskSubmission(currentTask.id, currentUser.id!) : Promise.resolve(null)
+          currentTask?.id ? (supabaseService.fetchImageAnnotations ? supabaseService.fetchImageAnnotations(currentTask.id, currentUser.id!) : Promise.resolve({})) : Promise.resolve({}),
         ]);
-        if (!isMounted.current) return;
-        setCompletedTaskIds(userCompletedTasks);
-        setAnnotations(userAnnotations);
-        setImageAnnotations(userImageAnnotations);
-        if (userSubmission) {
-          setLanguageSimilarityJustification(userSubmission.language_similarity_justification || '');
-          setGeneralComment(userSubmission.general_comment || '');
-          setTextConnectness(userSubmission.text_connectness || {});
-          setImageConnectness(userSubmission.image_connectness || {});
-        } else {
-          setCulturalScore(0);
-          setLanguageSimilarity('na');
-          setLanguageSimilarityJustification('');
-          setGeneralComment('');
-          setTextConnectness({});
-          setImageConnectness({});
+        if (isMounted.current) {
+          setCompletedTaskIds(userCompletedTasks);
+          setAnnotations(userAnnotations);
+          setImageAnnotations(userImageAnnotations as Record<number, ImageAnnotation[]>);
         }
       }
 
-      if (isMounted.current) alert("Project, Tasks, and Annotations imported successfully!");
+      if (isMounted.current) alert(t("import_success") || "Project imported successfully!");
 
-    } catch (e: any) { // Catch as any to access 'message' property
+    } catch (error) {
       if (isMounted.current) {
-        console.error("Import failed:", e);
-        alert(`Failed to import project. Details: ${e.message || e.toString()}`);
+        alert((t("import_error_failed") || "Failed to import project: ") + (error instanceof Error ? error.message : String(error)));
+        console.error("Import error:", error);
       }
     }
   };
