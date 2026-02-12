@@ -44,6 +44,7 @@ const AnnotationModal: React.FC<AnnotationModalProps> = ({
 
   const proxyOptions = [
     // Core
+    'names_forms_of_address',
     'language_local_expression',
     'food_dietary_practices',
     'place_physical_environment',

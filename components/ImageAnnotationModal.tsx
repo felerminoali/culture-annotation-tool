@@ -31,7 +31,8 @@ const ImageAnnotationModal: React.FC<ImageAnnotationModalProps> = ({
   const [showGuidelines, setShowGuidelines] = useState(false);
 
   const proxyOptions = [
-    'language_local_expression',
+
+    // 'language_local_expression',
     'food_dietary_practices',
     'place_physical_environment',
     'healthcare_community_practices',

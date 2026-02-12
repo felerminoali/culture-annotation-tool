@@ -110,7 +110,7 @@ export const translations = {
         yes: "Yes",
         no: "No",
         na: "N/A",
-        yes_no: "Yes / No",
+        yes_no: "Select all that apply ",
         feedback_item: "Feedback Item",
         medically_misleading: "Some content could be medically misleading (obvious)",
         culture_generic: "Culture feels generic / Western-default",
@@ -132,6 +132,7 @@ export const translations = {
         select_proxy: "Select a Culture Marker Category",
 
         // Core Culture Markers
+        names_forms_of_address: "Names & Forms of Address (forms of address that signal identity or relationships)",
         language_local_expression: "Language & Local Expression (slang, code-switching, local phrases: “Ag”, “mos”, “lekker”)",
         food_dietary_practices: "Food & Dietary Practices (foods, preparation methods, meal styles, eating habits)",
         place_physical_environment: "Place & Physical Environment (province, home, clinics, kitchen, shops, neighborhoods, local setting)",
@@ -333,7 +334,7 @@ export const translations = {
         no_account: "Precisa de uma conta? Registre-se",
         have_account: "Já tem uma conta? Login",
 
-        yes_no: "Sim / Não",
+        yes_no: "Selecione, quando aplicável",
         feedback_item: "Feedback Item",
         // Sidebar
         workspace_nav: "Espaço de Trabalho Ativo",
@@ -436,6 +437,7 @@ export const translations = {
         important_escalation: "Escalar para Alta Importância",
         culture_proxy: "Proxy Cultural",
         select_proxy: "Selecione um Proxy Cultural",
+        names_forms_of_address: "Nomes & Formas de Endereço (formas de endereço que indicam identidade ou relacionamentos)",
         language_local_expression: "Linguagem e Expressões Locais (gírias, troca de código, frases locais: “Ag”, “mos”, “lekker”)",
         food_dietary_practices: "Práticas Alimentares e Dietéticas (alimentos, métodos de preparação, estilos de refeição, hábitos alimentares)",
         place_physical_environment: "Lugar e Ambiente Físico (província, casa, clínicas, cozinha, lojas, bairros, ambiente local)",
