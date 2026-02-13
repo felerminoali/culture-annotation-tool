@@ -60,6 +60,7 @@ const App: React.FC = () => {
   const [textConnectness, setTextConnectness] = useState<Record<number, string>>({});
   const [imageConnectness, setImageConnectness] = useState<Record<number, string>>({});
   const [globalFeedback, setGlobalFeedback] = useState<Partial<UserTaskSubmission>>({
+    health_safety: false,
     medically_misleading: false,
     culture_generic: false,
     cultural_stereotypical: false,
@@ -165,7 +166,7 @@ const App: React.FC = () => {
 
   const ConnectednessButtons = ({ type, index, state, setState, annotationsCount }: { type: 'text' | 'image', index: number, state: Record<number, string>, setState: (val: Record<number, string>) => void, annotationsCount: number }) => {
     const value = state[index] || '';
-    const options = ['true', 'false', 'unsure'];
+    const options = ['disconnected', 'connected', 'very_connected'];
 
     return (
       <div className="mt-4 p-6 bg-white border border-slate-100 rounded-3xl shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-500">
@@ -188,23 +189,24 @@ const App: React.FC = () => {
           ))}
         </div>
 
-        {(value === 'true' || value === 'false') && (
-          <div className={`mt-4 flex items-start text-[11px] p-4 rounded-2xl border transition-all duration-300 ${annotationsCount === 0
-            ? 'text-amber-600 bg-amber-50/50 border-amber-100/50 animate-in fade-in slide-in-from-top-2'
-            : 'text-slate-400 bg-slate-50/30 border-slate-100/50'
-            }`}>
-            <i className={`fa-solid ${annotationsCount === 0 ? 'fa-circle-exclamation' : 'fa-circle-check'} mr-3 mt-0.5 ${annotationsCount === 0 ? 'text-amber-500' : 'text-slate-400'}`}></i>
-            <span className="font-bold leading-relaxed">
-              {type === 'text' ? t('text_highlight_instruction', language) : t('image_highlight_instruction', language)}
-            </span>
-          </div>
-        )}
+
+        <div className={`mt-4 flex items-start text-[11px] p-4 rounded-2xl border transition-all duration-300 ${annotationsCount === 0
+          ? 'text-amber-600 bg-amber-50/50 border-amber-100/50 animate-in fade-in slide-in-from-top-2'
+          : 'text-slate-400 bg-slate-50/30 border-slate-100/50'
+          }`}>
+          <i className={`fa-solid ${annotationsCount === 0 ? 'fa-circle-exclamation' : 'fa-circle-check'} mr-3 mt-0.5 ${annotationsCount === 0 ? 'text-amber-500' : 'text-slate-400'}`}></i>
+          <span className="font-bold leading-relaxed">
+            {type === 'text' ? t('text_highlight_instruction', language) : t('image_highlight_instruction', language)}
+          </span>
+        </div>
+
       </div>
     );
   };
 
   const GlobalFeedbackToggles = () => {
     const feedbackKeys: (keyof UserTaskSubmission)[] = [
+      'health_safety',
       'medically_misleading',
       'culture_generic',
       'cultural_stereotypical',
@@ -228,7 +230,7 @@ const App: React.FC = () => {
           <thead>
             <tr className="border-b border-slate-100 bg-slate-100/30">
               <th className="px-8 py-2 text-left text-[10px] font-black uppercase text-slate-400 tracking-widest">{t('feedback_item', language)}</th>
-              <th className="px-8 py-2 text-center text-[10px] font-black uppercase text-slate-400 tracking-widest whitespace-nowrap"> {t('yes_no', language)}</th>
+              <th className="px-8 py-2 text-center text-[10px] font-black uppercase text-slate-400 tracking-widest whitespace-nowrap"> {t('select_all', language)}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -468,6 +470,7 @@ const App: React.FC = () => {
           setTextConnectness(submission.text_connectness || {});
           setImageConnectness(submission.image_connectness || {});
           setGlobalFeedback({
+            health_safety: submission.health_safety || false,
             medically_misleading: submission.medically_misleading || false,
             culture_generic: submission.culture_generic || false,
             cultural_stereotypical: submission.cultural_stereotypical || false,
@@ -857,6 +860,7 @@ const App: React.FC = () => {
             textConnectness: taskSubmission?.text_connectness || {},
             imageConnectness: taskSubmission?.image_connectness || {},
             globalFeedback: {
+              health_safety: taskSubmission?.health_safety || false,
               medically_misleading: taskSubmission?.medically_misleading || false,
               culture_generic: taskSubmission?.culture_generic || false,
               cultural_stereotypical: taskSubmission?.cultural_stereotypical || false,
@@ -1402,6 +1406,7 @@ const App: React.FC = () => {
         subtype: data.subtype || 'culture',
         issueCategory: data.issueCategory,
         issueDescription: data.issueDescription,
+        rating: data.rating,
       };
       updatedImageAnnos = [...(imageAnnotations[paraIdxKey] || []), newAnno];
     } else {
@@ -1435,7 +1440,7 @@ const App: React.FC = () => {
 
     paragraphs.forEach((para, idx) => {
       // Check Text Connectedness
-      if (textConnectness[idx] === 'true' || textConnectness[idx] === 'false') {
+      if (textConnectness[idx] !== '' || textConnectness[idx] !== '') {
         const hasTextAnno = annotations.some(a => a.start >= para.offset && a.end <= para.offset + para.text.length);
         if (!hasTextAnno) {
           validationErrors.push(`${t('paragraph_label', language)} #${idx + 1}`);
@@ -1443,13 +1448,15 @@ const App: React.FC = () => {
       }
 
       // Check Image Connectedness
-      if (imageConnectness[idx] === 'true' || imageConnectness[idx] === 'false') {
+      if (imageConnectness[idx] !== '' || imageConnectness[idx] !== '') {
         const hasImageAnno = imageAnnotations[idx.toString()] && imageAnnotations[idx.toString()].length > 0;
         if (!hasImageAnno) {
           validationErrors.push(`Image #${idx + 1}`);
         }
       }
     });
+
+    console.log(validationErrors.length);
 
     if (validationErrors.length > 0) {
       alert(`${t('validation_missing_annotations', language)}\n\nMissing: ${validationErrors.join(', ')}`);

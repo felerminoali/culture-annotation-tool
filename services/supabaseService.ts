@@ -548,6 +548,7 @@ export const saveTaskSubmission = async (
             text_connectness: textConnectness || {},
             image_connectness: imageConnectness || {},
             completed: completed,
+            health_safety: feedbackData.health_safety || false,
             medically_misleading: feedbackData.medically_misleading || false,
             culture_generic: feedbackData.culture_generic || false,
             cultural_stereotypical: feedbackData.cultural_stereotypical || false,

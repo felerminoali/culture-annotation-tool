@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { DecisionStatus, ImageAnnotation, ShapeType, Language } from '../types';
 import { t } from '../services/i18n';
+import SearchableSelect from './SearchableSelect';
 
 interface ImageAnnotationModalProps {
   isOpen: boolean;
@@ -33,6 +34,7 @@ const ImageAnnotationModal: React.FC<ImageAnnotationModalProps> = ({
   const proxyOptions = [
 
     // 'language_local_expression',
+    'people_appearance',
     'food_dietary_practices',
     'place_physical_environment',
     'healthcare_community_practices',
@@ -129,6 +131,7 @@ const ImageAnnotationModal: React.FC<ImageAnnotationModalProps> = ({
 
         <div className="p-6 space-y-6 overflow-y-auto custom-scrollbar flex-1">
           <div className="space-y-6">
+{/*             
             <section className="space-y-2">
               <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">{t('description_label', language)}</label>
               <input
@@ -139,20 +142,19 @@ const ImageAnnotationModal: React.FC<ImageAnnotationModalProps> = ({
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
               />
-            </section>
+            </section> */}
 
             <section className="space-y-2">
               <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">{t('culture_proxy', language)}</label>
-              <select
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-bold shadow-inner"
+              <SearchableSelect
                 value={cultureProxy}
-                onChange={(e) => setCultureProxy(e.target.value)}
-              >
-                <option value="">{t('select_proxy', language)}</option>
-                {proxyOptions.map(opt => (
-                  <option key={opt} value={opt}>{t(opt as any, language)}</option>
-                ))}
-              </select>
+                options={proxyOptions.map(opt => ({
+                  value: opt,
+                  label: t(opt as any, language)
+                })).sort((a, b) => a.label.localeCompare(b.label))}
+                onChange={(value) => setCultureProxy(value)}
+                placeholder={t('select_proxy', language)}
+              />
               {cultureProxy === 'other' && (
                 <div className="animate-in slide-in-from-top-2 duration-200 mt-2">
                   <label className="block text-xs font-bold text-indigo-600 mb-1">{t('other_category_label', language)}</label>
@@ -253,7 +255,7 @@ const ImageAnnotationModal: React.FC<ImageAnnotationModalProps> = ({
               </div>
             </section>
 
-            {/* Comment Section - COMMENTED OUT
+            {/* Comment Section - COMMENTED OUT */}
             <section className="space-y-2 pt-4 border-t border-gray-100">
               <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">{t('comment_label', language)}</label>
               <textarea
@@ -264,7 +266,7 @@ const ImageAnnotationModal: React.FC<ImageAnnotationModalProps> = ({
                 onChange={(e) => setComment(e.target.value)}
               />
             </section>
-            */}
+            
           </div>
         </div>
 

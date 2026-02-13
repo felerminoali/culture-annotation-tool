@@ -133,6 +133,7 @@ export interface UserTaskSubmission {
     generalComment?: string; // General comment for the task
     text_connectness?: Record<number, string>; // New: JSON for paragraph connectedness
     image_connectness?: Record<number, string>; // New: JSON for image connectedness
+    health_safety?: boolean;
     medically_misleading?: boolean;
     culture_generic?: boolean;
     cultural_stereotypical?: boolean;

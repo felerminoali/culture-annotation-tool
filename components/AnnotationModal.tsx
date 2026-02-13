@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { SelectionState, Annotation, DecisionStatus, Language } from '../types';
 import { t } from '../services/i18n';
+import SearchableSelect from './SearchableSelect';
 
 interface AnnotationModalProps {
   isOpen: boolean;
@@ -44,6 +45,7 @@ const AnnotationModal: React.FC<AnnotationModalProps> = ({
 
   const proxyOptions = [
     // Core
+    'people_appearance',
     'names_forms_of_address',
     'language_local_expression',
     'food_dietary_practices',
@@ -228,17 +230,15 @@ const AnnotationModal: React.FC<AnnotationModalProps> = ({
               <label htmlFor="cultureProxy" className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center">
                 <i className="fa-solid fa-users-rectangle mr-2 text-indigo-500"></i> {t('culture_proxy', language)}
               </label>
-              <select
-                id="cultureProxy"
-                className="w-full px-4 py-3 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-xs font-bold bg-slate-50 shadow-inner appearance-none cursor-pointer"
+              <SearchableSelect
                 value={cultureProxy}
-                onChange={(e) => setCultureProxy(e.target.value)}
-              >
-                <option value="" disabled>{t('select_proxy', language)}</option>
-                {proxyOptions.map(opt => (
-                  <option key={opt} value={opt}>{t(opt as any, language)}</option>
-                ))}
-              </select>
+                options={proxyOptions.map(opt => ({
+                  value: opt,
+                  label: t(opt as any, language)
+                })).sort((a, b) => a.label.localeCompare(b.label))}
+                onChange={(value) => setCultureProxy(value)}
+                placeholder={t('select_proxy', language)}
+              />
             </div>
 
             {cultureProxy === 'other' && (
@@ -347,7 +347,7 @@ const AnnotationModal: React.FC<AnnotationModalProps> = ({
             </div>
           </div>
 
-          {/* 4. Comment Section - COMMENTED OUT
+           {/* 4. Comment Section - COMMENTED OUT */}
           <div className="pt-4 border-t border-slate-100">
             <label htmlFor="comment" className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center">
               <i className="fa-solid fa-pen-nib mr-2 text-indigo-500"></i> {t('comment_label', language)}
@@ -360,7 +360,7 @@ const AnnotationModal: React.FC<AnnotationModalProps> = ({
               onChange={(e) => setComment(e.target.value)}
             />
           </div>
-          */}
+          
 
 
         </div>
