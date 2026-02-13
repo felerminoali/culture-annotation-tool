@@ -911,12 +911,12 @@ const App: React.FC = () => {
       try {
         data = JSON.parse(text_content);
       } catch (e) {
-        if (isMounted.current) alert(t("import_error_invalid_json") || "Invalid JSON file");
+        if (isMounted.current) alert(t("import_error_invalid_json" as any, language) || "Invalid JSON file");
         return;
       }
 
       if (!data.project || !data.tasks) {
-        if (isMounted.current) alert(t("import_error_missing_data") || "Invalid project file format: missing project or tasks");
+        if (isMounted.current) alert(t("import_error_missing_data" as any, language) || "Invalid project file format: missing project or tasks");
         if (isMounted.current) console.error("Import failed: Invalid project file format", data);
         return;
       }
@@ -1024,11 +1024,11 @@ const App: React.FC = () => {
         }
       }
 
-      if (isMounted.current) alert(t("import_success") || "Project imported successfully!");
+      if (isMounted.current) alert(t("import_success" as any, language) || "Project imported successfully!");
 
     } catch (error) {
       if (isMounted.current) {
-        alert((t("import_error_failed") || "Failed to import project: ") + (error instanceof Error ? error.message : String(error)));
+        alert((t("import_error_failed" as any, language) || "Failed to import project: ") + (error instanceof Error ? error.message : String(error)));
         console.error("Import error:", error);
       }
     }
