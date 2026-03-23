@@ -43,9 +43,9 @@ jobs:
         if: env.BACKUP_ENABLED == 'true'
         run: mkdir -p db/backups
 
-      - name: Backup roles
+      - name: Debug Backup roles
         if: env.BACKUP_ENABLED == 'true'
-        run: supabase db dump --db-url "$SUPABASE_DB_URL" -f db/backups/roles.sql --role-only
+        run: supabase db dump --db-url "$SUPABASE_DB_URL" -f db/backups/roles.sql --role-only --debug
 
       - name: Backup schema
         if: env.BACKUP_ENABLED == 'true'
@@ -59,4 +59,5 @@ jobs:
         if: env.BACKUP_ENABLED == 'true'
         uses: stefanzweifel/git-auto-commit-action@v4
         with:
+
           commit_message: Supabase backup
