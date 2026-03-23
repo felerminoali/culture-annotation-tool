@@ -10,6 +10,7 @@ interface ImageAnnotationModalProps {
   onSave: (data: Partial<ImageAnnotation>) => void;
   existingAnnotation?: ImageAnnotation | null;
   language: Language;
+  onDelete?: () => void;
 }
 
 const ImageAnnotationModal: React.FC<ImageAnnotationModalProps> = ({
@@ -17,7 +18,8 @@ const ImageAnnotationModal: React.FC<ImageAnnotationModalProps> = ({
   onClose,
   onSave,
   existingAnnotation,
-  language
+  language,
+  onDelete
 }) => {
   const [description, setDescription] = useState('');
   const [isRelevant, setIsRelevant] = useState<DecisionStatus>('na');
@@ -75,6 +77,34 @@ const ImageAnnotationModal: React.FC<ImageAnnotationModalProps> = ({
     'social_norms_taboo',
     'institutional_trust_relations',
     'silence_implicit_knowledge',
+
+    // Extended Domains / Non-Overlap
+    'animals_human_interaction',
+    'plants_agriculture_food_sources',
+    'sports_recreation_physical_activity',
+    'arts_entertainment_culture',
+    'media_information_ecosystem',
+    'built_environment_infrastructure',
+    'objects_material_culture',
+    'symbols_visual_culture',
+    'events_rituals_celebrations',
+    'education_learning_practices',
+    'governance_politics_civic_life',
+    'economy_livelihood_strategies',
+    'environment_ecology_sustainability',
+    'risk_safety_security',
+    'migration_mobility_patterns',
+    'identity_ethnicity_culture',
+    'disability_accessibility',
+    'food_markets_distribution',
+    'water_sanitation_hygiene',
+    'energy_fuel_usage',
+    'visual_scene_composition',
+    'image_artifacts_quality',
+    'branding_advertising_presence',
+    'digital_platform_signals',
+    'interpersonal_distance_body_language',
+    'sound_audio_cues',
 
     // Fallback
     'other'
@@ -270,13 +300,25 @@ const ImageAnnotationModal: React.FC<ImageAnnotationModalProps> = ({
           </div>
         </div>
 
-        <div className="bg-gray-50 px-6 py-4 flex justify-end space-x-3 border-t border-gray-200">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800"
-          >
-            {t('cancel', language)}
-          </button>
+        <div className="bg-gray-50 px-6 py-4 flex justify-between items-center border-t border-gray-200">
+          <div>
+            {existingAnnotation && onDelete && (
+              <button
+                type="button"
+                onClick={onDelete}
+                className="px-4 py-2 text-sm font-semibold text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 rounded-lg flex items-center transition-colors"
+              >
+                <i className="fa-solid fa-trash-can mr-2"></i> {t('delete', language) || 'Delete'}
+              </button>
+            )}
+          </div>
+          <div className="flex space-x-3">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800"
+            >
+              {t('cancel', language)}
+            </button>
           <button
             onClick={() => onSave({
               description,
@@ -294,6 +336,7 @@ const ImageAnnotationModal: React.FC<ImageAnnotationModalProps> = ({
           >
             {t('save_annotation', language)}
           </button>
+          </div>
         </div>
       </div>
     </div>

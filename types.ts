@@ -97,6 +97,7 @@ export interface Project {
     description: string;
     guideline?: string;
     createdAt: number;
+    metadata?: Record<string, any>;
 }
 
 export interface Task {

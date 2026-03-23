@@ -1101,6 +1101,11 @@ const App: React.FC = () => {
   };
 
   const handleLogout = async () => {
+    // Explicitly save any pending annotations before logging out
+    if (currentUser && currentTask) {
+      supabaseService.saveAnnotations(currentTask.id, currentUser.id, annotations).catch(console.error);
+      supabaseService.saveImageAnnotations(currentTask.id, currentUser.id, imageAnnotations).catch(console.error);
+    }
     stopAudio();
     if (supabaseService.supabase) {
       // Perform the actual sign-out
@@ -1180,6 +1185,11 @@ const App: React.FC = () => {
 
   const nextTask = () => {
     stopAudio();
+    // Explicitly flush pending annotations to database
+    if (currentUser && currentTask) {
+      supabaseService.saveAnnotations(currentTask.id, currentUser.id, annotations).catch(console.error);
+      supabaseService.saveImageAnnotations(currentTask.id, currentUser.id, imageAnnotations).catch(console.error);
+    }
     if (currentTaskIndex < visibleTasks.length - 1) {
       setCurrentTaskIndex(currentTaskIndex + 1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1188,6 +1198,11 @@ const App: React.FC = () => {
 
   const prevTask = () => {
     stopAudio();
+    // Explicitly flush pending annotations to database
+    if (currentUser && currentTask) {
+      supabaseService.saveAnnotations(currentTask.id, currentUser.id, annotations).catch(console.error);
+      supabaseService.saveImageAnnotations(currentTask.id, currentUser.id, imageAnnotations).catch(console.error);
+    }
     if (currentTaskIndex > 0) {
       setCurrentTaskIndex(currentTaskIndex - 1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1217,6 +1232,27 @@ const App: React.FC = () => {
       setIsIssueModalOpen(true);
     } else {
       setIsTextModalOpen(true);
+    }
+  };
+
+  const handleDeleteTextAnnotation = async () => {
+    if (!editingTextAnnotation || !currentTask || !currentUser) return;
+    setIsTextModalOpen(false);
+
+    const id = editingTextAnnotation.id;
+    const updatedAnnos = annotations.filter(a => a.id !== id);
+    setAnnotations(updatedAnnos);
+    setEditingTextAnnotation(null);
+
+    // Manual trigger save
+    try {
+      await supabaseService.saveAnnotations(currentTask.id, currentUser.id, updatedAnnos);
+      if (!isMounted.current) return;
+      const updatedGlobalLog = await supabaseService.fetchAllAnnotations();
+      if (!isMounted.current) return;
+      setGlobalLog(updatedGlobalLog);
+    } catch (error) {
+      if (isMounted.current) console.error('Error deleting text annotation:', error);
     }
   };
 
@@ -1368,6 +1404,29 @@ const App: React.FC = () => {
     }
   };
 
+  const handleDeleteImageAnnotation = async () => {
+    if (!editingImageAnno || activeImageIdx === null || !currentTask || !currentUser) return;
+    const paraIdxKey = activeImageIdx.toString();
+    setIsImageModalOpen(false);
+
+    const updatedImageAnnos = (imageAnnotations[paraIdxKey] || []).filter(a => a.id !== editingImageAnno.id);
+    const newImageAnnotationsState = { ...imageAnnotations, [paraIdxKey]: updatedImageAnnos };
+    
+    setImageAnnotations(newImageAnnotationsState);
+    setEditingImageAnno(null);
+    setPendingPin(null);
+
+    try {
+      await supabaseService.saveImageAnnotations(currentTask.id, currentUser.id, newImageAnnotationsState);
+      if (!isMounted.current) return;
+      const updatedGlobalLog = await supabaseService.fetchAllAnnotations();
+      if (!isMounted.current) return;
+      setGlobalLog(updatedGlobalLog);
+    } catch (error) {
+      if (isMounted.current) console.error('Error deleting image annotation:', error);
+    }
+  };
+
   const saveImageAnnotation = async (data: Omit<ImageAnnotation, 'id' | 'x' | 'y' | 'width' | 'height' | 'timestamp' | 'userId' | 'taskId' | 'userEmail' | 'paragraph_index' | 'submissionTaskId' | 'submissionUserId'> & { rating: number }) => {
     if (activeImageIdx === null || !currentTask || !currentUser?.id) return;
     const paraIdxKey = activeImageIdx.toString();
@@ -1485,6 +1544,10 @@ const App: React.FC = () => {
         imageConnectness,
         globalFeedback
       );
+      // Explicitly flush pending annotations alongside submission
+      await supabaseService.saveAnnotations(currentTask.id, currentUser.id, annotations);
+      await supabaseService.saveImageAnnotations(currentTask.id, currentUser.id, imageAnnotations);
+
       // Re-fetch completed task IDs for the current user
       const updatedCompletedTaskIds = await supabaseService.fetchCompletedTaskIds(currentUser.id);
       if (!isMounted.current) return;
@@ -2325,6 +2388,7 @@ const App: React.FC = () => {
         isOpen={isTextModalOpen}
         onClose={() => { setIsTextModalOpen(false); setCurrentSelection(null); setEditingTextAnnotation(null); }}
         onSave={saveTextAnnotation}
+        onDelete={handleDeleteTextAnnotation}
         selection={currentSelection}
         editingAnnotation={editingTextAnnotation}
         language={language}
@@ -2343,6 +2407,7 @@ const App: React.FC = () => {
         isOpen={isImageModalOpen}
         onClose={() => { setIsImageModalOpen(false); setPendingPin(null); setEditingImageAnno(null); }}
         onSave={saveImageAnnotation}
+        onDelete={handleDeleteImageAnnotation}
         existingAnnotation={editingImageAnno}
         language={language}
       />

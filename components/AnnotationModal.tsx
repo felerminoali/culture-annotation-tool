@@ -21,6 +21,7 @@ interface AnnotationModalProps {
   editingAnnotation?: Annotation | null;
   language: Language;
   projectGuideline?: string;
+  onDelete?: () => void;
 }
 
 const AnnotationModal: React.FC<AnnotationModalProps> = ({
@@ -30,7 +31,8 @@ const AnnotationModal: React.FC<AnnotationModalProps> = ({
   selection,
   editingAnnotation,
   language,
-  projectGuideline
+  projectGuideline,
+  onDelete
 }) => {
   const [comment, setComment] = useState('');
   const [showGuidelines, setShowGuidelines] = useState(false);
@@ -88,6 +90,34 @@ const AnnotationModal: React.FC<AnnotationModalProps> = ({
     'social_norms_taboo',
     'institutional_trust_relations',
     'silence_implicit_knowledge',
+
+    // Extended Domains / Non-Overlap
+    'animals_human_interaction',
+    'plants_agriculture_food_sources',
+    'sports_recreation_physical_activity',
+    'arts_entertainment_culture',
+    'media_information_ecosystem',
+    'built_environment_infrastructure',
+    'objects_material_culture',
+    'symbols_visual_culture',
+    'events_rituals_celebrations',
+    'education_learning_practices',
+    'governance_politics_civic_life',
+    'economy_livelihood_strategies',
+    'environment_ecology_sustainability',
+    'risk_safety_security',
+    'migration_mobility_patterns',
+    'identity_ethnicity_culture',
+    'disability_accessibility',
+    'food_markets_distribution',
+    'water_sanitation_hygiene',
+    'energy_fuel_usage',
+    'visual_scene_composition',
+    'image_artifacts_quality',
+    'branding_advertising_presence',
+    'digital_platform_signals',
+    'interpersonal_distance_body_language',
+    'sound_audio_cues',
 
     // Fallback
     'other'
@@ -365,13 +395,25 @@ const AnnotationModal: React.FC<AnnotationModalProps> = ({
 
         </div>
 
-        <div className="bg-slate-50 px-8 py-6 flex justify-end space-x-4 border-t border-slate-100">
-          <button
-            onClick={onClose}
-            className="px-6 py-3 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors"
-          >
-            {t('discard', language)}
-          </button>
+        <div className="bg-slate-50 px-8 py-6 flex justify-between items-center border-t border-slate-100">
+          <div>
+            {editingAnnotation && onDelete && (
+              <button
+                type="button"
+                onClick={onDelete}
+                className="px-4 py-3 text-xs font-black uppercase tracking-widest text-red-500 hover:text-red-700 transition-colors flex items-center bg-red-100/50 hover:bg-red-100 rounded-xl"
+              >
+                <i className="fa-solid fa-trash-can mr-2"></i> {t('delete', language) || 'Delete'}
+              </button>
+            )}
+          </div>
+          <div className="flex space-x-4">
+            <button
+              onClick={onClose}
+              className="px-6 py-3 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors"
+            >
+              {t('discard', language)}
+            </button>
           <button
             onClick={handleSave}
             disabled={!cultureProxy || (cultureProxy === 'other' && !customCultureProxy) || rating === 0 || isSupported === 'na'}
@@ -379,6 +421,7 @@ const AnnotationModal: React.FC<AnnotationModalProps> = ({
           >
             {editingAnnotation ? t('push_updates', language) : t('submit', language)}
           </button>
+          </div>
         </div>
       </div >
     </div >

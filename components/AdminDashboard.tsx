@@ -692,7 +692,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <button onClick={() => openProjectModal(project)} className="w-12 h-12 bg-slate-50 text-indigo-600 rounded-2xl hover:bg-indigo-600 hover:text-white transition-all flex items-center justify-center">
                         <i className="fa-solid fa-pen"></i>
                       </button>
-                      <button onClick={() => onDeleteProject(project.id)} className="w-12 h-12 bg-slate-50 text-red-400 rounded-2xl hover:bg-red-500 hover:text-white transition-all flex items-center justify-center">
+                      <button onClick={() => {
+                        if (window.confirm(t('confirm_delete_project', language))) {
+                          onDeleteProject(project.id);
+                        }
+                      }} className="w-12 h-12 bg-slate-50 text-red-400 rounded-2xl hover:bg-red-500 hover:text-white transition-all flex items-center justify-center">
                         <i className="fa-solid fa-trash"></i>
                       </button>
                     </div>

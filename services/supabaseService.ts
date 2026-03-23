@@ -238,7 +238,8 @@ export const fetchProjects = async (): Promise<Project[]> => {
         title: p.name,
         description: p.description || '', // Ensure description is mapped
         guideline: p.guideline || '',
-        createdAt: new Date(p.created_at).getTime()
+        createdAt: new Date(p.created_at).getTime(),
+        metadata: p.metadata || {}
     }));
 };
 
@@ -254,7 +255,8 @@ export const createProject = async (project: Omit<Project, 'id' | 'createdAt'>):
             name: project.title,
             description: project.description,
             guideline: project.guideline,
-            created_by: user.id
+            created_by: user.id,
+            metadata: project.metadata
         })
         .select()
         .single();
@@ -269,7 +271,8 @@ export const createProject = async (project: Omit<Project, 'id' | 'createdAt'>):
         title: data.name,
         description: data.description || '',
         guideline: data.guideline || '',
-        createdAt: new Date(data.created_at).getTime()
+        createdAt: new Date(data.created_at).getTime(),
+        metadata: data.metadata || {}
     };
 };
 
@@ -280,6 +283,7 @@ export const updateProject = async (id: string, updates: Partial<Project>) => {
     if (updates.title !== undefined) payload.name = updates.title;
     if (updates.description !== undefined) payload.description = updates.description;
     if (updates.guideline !== undefined) payload.guideline = updates.guideline;
+    if (updates.metadata !== undefined) payload.metadata = updates.metadata;
 
     const { error } = await supabase
         .from('projects')
@@ -304,7 +308,8 @@ export const upsertProject = async (project: Project): Promise<Project | null> =
         description: project.description,
         guideline: project.guideline,
         created_by: user.id,
-        created_at: new Date(project.createdAt).toISOString()
+        created_at: new Date(project.createdAt).toISOString(),
+        metadata: project.metadata
     };
 
     const { data, error } = await supabase
@@ -323,7 +328,8 @@ export const upsertProject = async (project: Project): Promise<Project | null> =
         title: data.name,
         description: data.description || '',
         guideline: data.guideline || '',
-        createdAt: new Date(data.created_at).getTime()
+        createdAt: new Date(data.created_at).getTime(),
+        metadata: data.metadata || {}
     };
 };
 
@@ -422,7 +428,8 @@ export const createTask = async (task: Task): Promise<Task | null> => { // Chang
         question: data.question || '',
         category: data.category,
         gender: data.gender,
-        taskType: (data.task_type || 'independent') as 'independent' | 'overlapped' | 'control' | 'consistency'
+        taskType: (data.task_type || 'independent') as 'independent' | 'overlapped' | 'control' | 'consistency',
+        metadata: data.metadata || {}
     };
 };
 
@@ -470,7 +477,8 @@ export const upsertTask = async (task: Task): Promise<Task | null> => {
         question: task.question,
         category: task.category,
         gender: task.gender,
-        task_type: task.taskType
+        task_type: task.taskType,
+        metadata: task.metadata
     };
 
     const { data, error } = await supabase
@@ -496,7 +504,8 @@ export const upsertTask = async (task: Task): Promise<Task | null> => {
         question: data.question || '',
         category: data.category,
         gender: data.gender,
-        taskType: (data.task_type || 'independent') as 'independent' | 'overlapped' | 'control' | 'consistency'
+        taskType: (data.task_type || 'independent') as 'independent' | 'overlapped' | 'control' | 'consistency',
+        metadata: data.metadata || {}
     };
 };
 
@@ -586,9 +595,9 @@ export const fetchTaskSubmission = async (taskId: string, userId: string) => {
         .select('*')
         .eq('task_id', taskId)
         .eq('user_id', userId)
-        .single();
+        .maybeSingle();
 
-    if (error && error.code !== 'PGRST116') { // PGRST116 is "No rows found"
+    if (error) {
         console.error('Error fetching task submission:', error);
         throw error;
     }
@@ -625,6 +634,7 @@ export const fetchAllUserTaskSubmissions = async (): Promise<UserTaskSubmission[
             text_connectness,
             image_connectness,
             completed,
+            health_safety,
             medically_misleading,
             culture_generic,
             cultural_stereotypical,
@@ -658,6 +668,7 @@ export const fetchAllUserTaskSubmissions = async (): Promise<UserTaskSubmission[
         generalComment: s.general_comment || '',
         text_connectness: s.text_connectness || {},
         image_connectness: s.image_connectness || {},
+        health_safety: s.health_safety,
         medically_misleading: s.medically_misleading,
         culture_generic: s.culture_generic,
         cultural_stereotypical: s.cultural_stereotypical,
@@ -691,6 +702,7 @@ export const fetchSubmissionsForTasks = async (taskIds: string[]): Promise<UserT
             text_connectness,
             image_connectness,
             completed,
+            health_safety,
             medically_misleading,
             culture_generic,
             cultural_stereotypical,
@@ -725,6 +737,7 @@ export const fetchSubmissionsForTasks = async (taskIds: string[]): Promise<UserT
         generalComment: s.general_comment || '',
         text_connectness: s.text_connectness || {},
         image_connectness: s.image_connectness || {},
+        health_safety: s.health_safety,
         medically_misleading: s.medically_misleading,
         culture_generic: s.culture_generic,
         cultural_stereotypical: s.cultural_stereotypical,
