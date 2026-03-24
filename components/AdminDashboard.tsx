@@ -28,6 +28,7 @@ interface AdminDashboardProps {
   onUpdateProject: (id: string, updates: Partial<Project>) => void;
   onDeleteProject: (id: string) => void;
   onAddTask: (task: Task) => void;
+  onBulkAddTasks?: (tasks: any[]) => void;
   onUpdateTask: (id: string, updates: Partial<Task>) => void;
   onDeleteTask: (id: string) => void;
   onInspectProject: (projectId: string) => void;
@@ -58,6 +59,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onUpdateProject,
   onDeleteProject,
   onAddTask,
+  onBulkAddTasks,
   onUpdateTask,
   onDeleteTask,
   onInspectProject,
@@ -498,12 +500,51 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         )}
 
         {activeTab === 'tasks' && (
-          <button
-            onClick={() => openTaskModal()}
-            className="px-8 py-4 bg-slate-900 text-white rounded-[1.5rem] text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all flex items-center shadow-2xl shadow-slate-200 border-b-4 border-slate-700 active:scale-95"
-          >
-            <i className="fa-solid fa-plus mr-3 text-indigo-400"></i> {t('new_task', language)}
-          </button>
+          <div className="flex space-x-4">
+            <div className="relative">
+              <input
+                type="file"
+                accept=".json"
+                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = (event) => {
+                    try {
+                      const parsed = JSON.parse(event.target?.result as string);
+                      const tasksArray = Array.isArray(parsed) ? parsed : [parsed];
+                      
+                      const defaultProjectId = (selectedProjectFilter !== 'all' && selectedProjectFilter !== 'unassigned') 
+                           ? selectedProjectFilter : null;
+                      
+                      const mapped = tasksArray.map(t => ({
+                         ...t,
+                         projectId: t.projectId || t.project_id || defaultProjectId
+                      }));
+                      
+                      if (onBulkAddTasks) onBulkAddTasks(mapped);
+                    } catch (err) {
+                      alert("Failed to parse JSON file.");
+                    }
+                  };
+                  reader.readAsText(file);
+                  e.target.value = '';
+                }}
+              />
+              <button
+                className="px-8 py-4 bg-white text-indigo-600 border border-slate-200 rounded-[1.5rem] text-xs font-black uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center shadow-sm relative"
+              >
+                <i className="fa-solid fa-file-import mr-3"></i> {t('import_tasks', language)}
+              </button>
+            </div>
+            <button
+              onClick={() => openTaskModal()}
+              className="px-8 py-4 bg-slate-900 text-white rounded-[1.5rem] text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all flex items-center shadow-2xl shadow-slate-200 border-b-4 border-slate-700 active:scale-95"
+            >
+              <i className="fa-solid fa-plus mr-3 text-indigo-400"></i> {t('new_task', language)}
+            </button>
+          </div>
         )}
       </div>
 

@@ -110,6 +110,38 @@ const App: React.FC = () => {
     };
   }, []);
 
+  // -----------------------------------------------------------------------
+  // Stale-closure-safe refs: always hold the latest state values so that
+  // navigation handlers (nextTask/prevTask) can save up-to-date data even
+  // when called from inside a closure that captured older state.
+  // -----------------------------------------------------------------------
+  const annotationsRef = useRef(annotations);
+  const imageAnnotationsRef = useRef(imageAnnotations);
+  const textConnectnessRef = useRef(textConnectness);
+  const imageConnectnessRef = useRef(imageConnectness);
+  const culturalScoreRef = useRef(culturalScore);
+  const languageSimilarityRef = useRef(languageSimilarity);
+  const languageSimilarityJustificationRef = useRef(languageSimilarityJustification);
+  const generalCommentRef = useRef(generalComment);
+  const globalFeedbackRef = useRef(globalFeedback);
+  const completedTaskIdsRef = useRef(completedTaskIds);
+
+  useEffect(() => { annotationsRef.current = annotations; }, [annotations]);
+  useEffect(() => { imageAnnotationsRef.current = imageAnnotations; }, [imageAnnotations]);
+  useEffect(() => { textConnectnessRef.current = textConnectness; }, [textConnectness]);
+  useEffect(() => { imageConnectnessRef.current = imageConnectness; }, [imageConnectness]);
+  useEffect(() => { culturalScoreRef.current = culturalScore; }, [culturalScore]);
+  useEffect(() => { languageSimilarityRef.current = languageSimilarity; }, [languageSimilarity]);
+  useEffect(() => { languageSimilarityJustificationRef.current = languageSimilarityJustification; }, [languageSimilarityJustification]);
+  useEffect(() => { generalCommentRef.current = generalComment; }, [generalComment]);
+  useEffect(() => { globalFeedbackRef.current = globalFeedback; }, [globalFeedback]);
+  useEffect(() => { completedTaskIdsRef.current = completedTaskIds; }, [completedTaskIds]);
+
+  // Ref that prevents the auto-save from running while loadTaskData is in flight.
+  // Without this guard, the auto-save fires with empty annotations during page load
+  // and the delta-delete wipes all existing annotations from the DB.
+  const isLoadingTaskData = useRef(false);
+
 
   // Filter TASKS based on assignment if not admin
   const visibleTasks = useMemo(() => {
@@ -164,7 +196,7 @@ const App: React.FC = () => {
     return result;
   }, [currentTask]);
 
-  const ConnectednessButtons = ({ type, index, state, setState, annotationsCount }: { type: 'text' | 'image', index: number, state: Record<number, string>, setState: (val: Record<number, string>) => void, annotationsCount: number }) => {
+  const ConnectednessButtons = ({ type, index, state, setState, annotationsCount }: { type: 'text' | 'image', index: number, state: Record<number, string>, setState: React.Dispatch<React.SetStateAction<Record<number, string>>>, annotationsCount: number }) => {
     const value = state[index] || '';
     const options = ['disconnected', 'connected', 'very_connected'];
 
@@ -178,7 +210,7 @@ const App: React.FC = () => {
           {options.map((opt) => (
             <button
               key={opt}
-              onClick={() => setState({ ...state, [index]: opt })}
+              onClick={() => setState(prev => ({ ...prev, [index]: opt }))}
               className={`flex-1 py-3 px-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border ${value === opt
                 ? 'bg-slate-900 text-white border-slate-900 shadow-lg scale-[1.02]'
                 : 'bg-white text-slate-400 border-slate-100 hover:border-slate-200 hover:bg-slate-50'
@@ -243,7 +275,7 @@ const App: React.FC = () => {
                 </td>
                 <td className="px-8 py-2 text-center">
                   <button
-                    onClick={() => setGlobalFeedback(prev => ({ ...prev, [key]: !globalFeedback[key as keyof typeof globalFeedback] }))}
+                    onClick={() => setGlobalFeedback(prev => ({ ...prev, [key]: !prev[key as keyof typeof prev] }))}
                     className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all shadow-sm mx-auto border-2 ${globalFeedback[key as keyof typeof globalFeedback] === true
                       ? 'bg-indigo-600 border-indigo-600 text-white rotate-0'
                       : 'bg-white border-slate-200 text-slate-200 hover:border-indigo-200'
@@ -447,18 +479,17 @@ const App: React.FC = () => {
     if (!isAuthenticated || !currentUser || !currentTask || !supabaseService.supabase) return;
 
     const loadTaskData = async () => {
+      isLoadingTaskData.current = true; // Block auto-save while loading
       try {
         const [completedIds, annotationsData, imageAnnotationsData, submission] = await Promise.all([
-          supabaseService.fetchCompletedTaskIds(currentUser.id!), // Fetch for current user
+          supabaseService.fetchCompletedTaskIds(currentUser.id!),
           supabaseService.fetchAnnotations(currentTask.id, currentUser.id!),
           supabaseService.fetchImageAnnotations(currentTask.id, currentUser.id!),
           supabaseService.fetchTaskSubmission(currentTask.id, currentUser.id!)
         ]);
 
-        if (!isMounted.current) return; // Prevent state updates if component unmounted
+        if (!isMounted.current) return;
 
-        // Note: completedTaskIds are already set by loadGlobalResources for initial load.
-        // This line ensures it's up-to-date for individual task changes too.
         setCompletedTaskIds(completedIds);
         setAnnotations(annotationsData);
         setImageAnnotations(imageAnnotationsData);
@@ -513,31 +544,37 @@ const App: React.FC = () => {
           });
         }
       } catch (error) {
-        if (!isMounted.current) return; // Only log if still mounted
+        if (!isMounted.current) return;
         console.error('Error loading task data:', error);
-        // Reset current task data on error to prevent displaying stale info
         setAnnotations([]);
         setImageAnnotations({});
         setCulturalScore(0);
         setLanguageSimilarity('na');
         setLanguageSimilarityJustification('');
+      } finally {
+        isLoadingTaskData.current = false; // Re-enable auto-save
       }
     };
 
     loadTaskData();
-  }, [isAuthenticated, currentUser, currentTask?.id]); // Rerun when currentTask changes
+  }, [isAuthenticated, currentUser, currentTask?.id]);
 
-  // Save current task data to Supabase (debounced or on explicit actions)
-  // This useEffect will be triggered when annotations, imageAnnotations etc. change
-  // For a real-time app, you might debounce this or save on explicit user actions.
-  // For now, we'll let it save on state changes, which might be too frequent.
-  // A better approach would be to only call `saveTaskSubmission` and `saveAnnotations`/`saveImageAnnotations`
-  // when the user explicitly commits a change or completes the task.
+  // Debounced auto-save.
+  // IMPORTANT: Does NOT save when isLoadingTaskData is true (prevents delta-delete
+  // from wiping annotations while the initial fetch is still in flight).
+  // Uses refs for `completed` flag so completedTaskIds is NOT a dep
+  // (adding it to deps would cause a spurious save during initial page load).
   useEffect(() => {
     if (!isAuthenticated || !currentUser || !currentTask || !supabaseService.supabase) return;
 
     const timer = setTimeout(async () => {
-      if (!isMounted.current) return; // Check if mounted before running debounced save logic
+      if (!isMounted.current) return;
+      // Block if task data is still being loaded from DB — saving now would
+      // write stale/empty state and the delta-delete would wipe real data.
+      if (isLoadingTaskData.current) return;
+
+      // Read `completed` from ref so its change never itself triggers this effect.
+      const isCompleted = completedTaskIdsRef.current.includes(currentTask.id);
 
       try {
         await supabaseService.saveTaskSubmission(
@@ -547,7 +584,7 @@ const App: React.FC = () => {
           languageSimilarity,
           languageSimilarityJustification,
           generalComment,
-          isTaskSubmitted, // Pass the current submission status
+          isCompleted,
           textConnectness,
           imageConnectness,
           globalFeedback
@@ -563,11 +600,15 @@ const App: React.FC = () => {
       } catch (error) {
         if (isMounted.current) console.error('Error saving task data:', error);
       }
-    }, 1000); // Debounce saves by 1 second
+    }, 1000);
 
     return () => clearTimeout(timer);
-  }, [annotations, imageAnnotations, culturalScore, languageSimilarity, languageSimilarityJustification, generalComment, textConnectness, imageConnectness, globalFeedback,
-    isAuthenticated, currentUser, currentTask?.id, isTaskSubmitted]); // Add isTaskSubmitted to dependencies
+  // completedTaskIds intentionally excluded: use completedTaskIdsRef instead
+  // to avoid triggering saves during initial load when completedTaskIds first populates.
+  // isTaskSubmitted intentionally excluded: its change must NOT trigger a save.
+  }, [annotations, imageAnnotations, culturalScore, languageSimilarity,
+      languageSimilarityJustification, generalComment, textConnectness,
+      imageConnectness, globalFeedback, isAuthenticated, currentUser, currentTask?.id]);
 
   useEffect(() => {
     localStorage.setItem('annotate_language', language);
@@ -707,6 +748,24 @@ const App: React.FC = () => {
       if (isMounted.current) {
         console.error('Error adding task:', error.message);
         setError(error.message);
+      }
+    }
+  }, []);
+
+  const bulkAddTasks = useCallback(async (tasksList: any[]) => {
+    try {
+      if (!supabaseService.supabase) throw new Error("Supabase is not configured.");
+      
+      await supabaseService.bulkCreateTasks(tasksList);
+      
+      const updatedTasks = await supabaseService.fetchTasks();
+      if (!isMounted.current) return;
+      setTasks(updatedTasks);
+      alert("Tasks imported successfully!");
+    } catch (error) {
+      if (isMounted.current) {
+        console.error('Error in bulkAddTasks:', error);
+        alert('Failed to bulk add tasks: ' + (error as Error).message);
       }
     }
   }, []);
@@ -969,7 +1028,37 @@ const App: React.FC = () => {
           }
 
           for (const taskId of completedTaskIds || []) {
-            await supabaseService.saveTaskSubmission(taskId, userId, 0, 'na', '', '', true);
+            // Fetch existing submission first to avoid overwriting connectedness and feedback
+            const existing = await supabaseService.fetchTaskSubmission(taskId, userId);
+            await supabaseService.saveTaskSubmission(
+              taskId, 
+              userId, 
+              existing?.cultural_score || 0,
+              existing?.language_similarity || 'na',
+              existing?.language_similarity_justification || '',
+              existing?.general_comment || '',
+              true,
+              existing?.text_connectness || {},
+              existing?.image_connectness || {},
+              existing ? {
+                health_safety: existing.health_safety,
+                medically_misleading: existing.medically_misleading,
+                culture_generic: existing.culture_generic,
+                cultural_stereotypical: existing.cultural_stereotypical,
+                persona_consistency_strong: existing.persona_consistency_strong,
+                persona_consistency_broken: existing.persona_consistency_broken,
+                advice_practical: existing.advice_practical,
+                advice_vague: existing.advice_vague,
+                advice_unrealistic: existing.advice_unrealistic,
+                images_match_story: existing.images_match_story,
+                images_mismatch_persona: existing.images_mismatch_persona,
+                ai_artifacts: existing.ai_artifacts,
+                story_engaging: existing.story_engaging,
+                story_confusing: existing.story_confusing,
+                story_supportive: existing.story_supportive,
+                story_tone_inappropriate: existing.story_tone_inappropriate,
+              } : {}
+            );
             if (isMounted.current) {
               setCompletedTaskIds(prev => Array.from(new Set([...prev, taskId])));
             }
@@ -1101,10 +1190,9 @@ const App: React.FC = () => {
   };
 
   const handleLogout = async () => {
-    // Explicitly save any pending annotations before logging out
+    // Await the full flush before signing out so no data is lost
     if (currentUser && currentTask) {
-      supabaseService.saveAnnotations(currentTask.id, currentUser.id, annotations).catch(console.error);
-      supabaseService.saveImageAnnotations(currentTask.id, currentUser.id, imageAnnotations).catch(console.error);
+      await flushCurrentTaskToDb(currentTask, currentUser).catch(console.error);
     }
     stopAudio();
     if (supabaseService.supabase) {
@@ -1183,12 +1271,34 @@ const App: React.FC = () => {
     setPlayingParaIdx(idx === playingParaIdx ? null : idx);
   };
 
-  const nextTask = () => {
+  // Helper: flush all current task data to the DB using refs so we always
+  // capture the LATEST state even when called from inside a stale closure.
+  const flushCurrentTaskToDb = useCallback(async (task: typeof currentTask, user: typeof currentUser) => {
+    if (!task || !user) return;
+    const isCompleted = completedTaskIdsRef.current.includes(task.id);
+    await Promise.all([
+      supabaseService.saveAnnotations(task.id, user.id, annotationsRef.current),
+      supabaseService.saveImageAnnotations(task.id, user.id, imageAnnotationsRef.current),
+      supabaseService.saveTaskSubmission(
+        task.id, user.id,
+        culturalScoreRef.current,
+        languageSimilarityRef.current,
+        languageSimilarityJustificationRef.current,
+        generalCommentRef.current,
+        isCompleted,
+        textConnectnessRef.current,
+        imageConnectnessRef.current,
+        globalFeedbackRef.current
+      ),
+    ]);
+  }, []); // No deps — reads from refs only
+
+  const nextTask = async () => {
     stopAudio();
-    // Explicitly flush pending annotations to database
+    // AWAIT the save so that loadTaskData for the next task does not overwrite
+    // in-flight data from the previous task (race condition fix).
     if (currentUser && currentTask) {
-      supabaseService.saveAnnotations(currentTask.id, currentUser.id, annotations).catch(console.error);
-      supabaseService.saveImageAnnotations(currentTask.id, currentUser.id, imageAnnotations).catch(console.error);
+      await flushCurrentTaskToDb(currentTask, currentUser).catch(console.error);
     }
     if (currentTaskIndex < visibleTasks.length - 1) {
       setCurrentTaskIndex(currentTaskIndex + 1);
@@ -1196,12 +1306,12 @@ const App: React.FC = () => {
     }
   };
 
-  const prevTask = () => {
+  const prevTask = async () => {
     stopAudio();
-    // Explicitly flush pending annotations to database
+    // AWAIT the save so that loadTaskData for the previous task does not
+    // overwrite in-flight data (race condition fix).
     if (currentUser && currentTask) {
-      supabaseService.saveAnnotations(currentTask.id, currentUser.id, annotations).catch(console.error);
-      supabaseService.saveImageAnnotations(currentTask.id, currentUser.id, imageAnnotations).catch(console.error);
+      await flushCurrentTaskToDb(currentTask, currentUser).catch(console.error);
     }
     if (currentTaskIndex > 0) {
       setCurrentTaskIndex(currentTaskIndex - 1);
@@ -1269,116 +1379,105 @@ const App: React.FC = () => {
     if (!currentTask || !currentUser?.id) return;
     setIsTextModalOpen(false); // Close modal early to avoid double renders
 
-    let updatedAnnos: Annotation[];
+    setAnnotations(prev => {
+      let updated: Annotation[];
+      if (editingTextAnnotation) {
+        updated = prev.map(a => a.id === editingTextAnnotation.id ? {
+          ...a,
+          comment,
+          isImportant,
+          isRelevant,
+          relevantJustification,
+          isSupported,
+          supportedJustification,
+          cultureProxy,
+          rating,
+          timestamp: Date.now()
+        } : a);
+      } else if (currentSelection) {
+        const newAnnotation: Annotation = {
+          id: generateUuid(),
+          ...currentSelection,
+          comment,
+          isImportant,
+          isRelevant,
+          relevantJustification,
+          isSupported,
+          supportedJustification,
+          cultureProxy,
+          rating,
+          type: 'manual',
+          timestamp: Date.now(),
+          userEmail: currentUser?.email,
+          userId: currentUser.id,
+          taskId: currentTask.id,
+          submissionTaskId: currentTask.id,
+          submissionUserId: currentUser.id,
+          subtype: 'culture'
+        };
+        updated = [...prev, newAnnotation];
+      } else {
+        return prev;
+      }
 
-    if (editingTextAnnotation) {
-      updatedAnnos = annotations.map(a => a.id === editingTextAnnotation.id ? {
-        ...a,
-        comment,
-        isImportant,
-        isRelevant,
-        relevantJustification,
-        isSupported,
-        supportedJustification,
-        cultureProxy,
-        rating,
-        timestamp: Date.now()
-      } : a);
-    } else if (currentSelection) {
-      const newAnnotation: Annotation = {
-        id: generateUuid(), // Use generated UUID
-        ...currentSelection,
-        comment,
-        isImportant,
-        isRelevant,
-        relevantJustification,
-        isSupported,
-        supportedJustification,
-        cultureProxy,
-        rating,
-        type: 'manual',
-        timestamp: Date.now(),
-        userEmail: currentUser?.email,
-        userId: currentUser.id,
-        taskId: currentTask.id,
-        submissionTaskId: currentTask.id, // Set submission_task_id
-        submissionUserId: currentUser.id, // Set submission_user_id
-        subtype: 'culture'
-      };
-      updatedAnnos = [...annotations, newAnnotation];
-    } else {
-      return; // Should not happen
-    }
+      // Immediate DB save
+      if (currentUser && currentTask) {
+        supabaseService.saveAnnotations(currentTask.id, currentUser.id, updated).catch(err => {
+          console.error('Error saving text annotation:', err);
+        });
+      }
+      return updated;
+    });
 
-    setAnnotations(updatedAnnos);
     setCurrentSelection(null);
     setEditingTextAnnotation(null);
-
-    // Manual trigger save for immediate persistence rather than waiting for debounce
-    if (currentUser && currentTask) {
-      try {
-        await supabaseService.saveAnnotations(currentTask.id, currentUser.id, updatedAnnos);
-        if (!isMounted.current) return;
-        const updatedGlobalLog = await supabaseService.fetchAllAnnotations();
-        if (!isMounted.current) return;
-        setGlobalLog(updatedGlobalLog);
-      } catch (error) {
-        if (isMounted.current) console.error('Error saving text annotation:', error);
-      }
-    }
   };
 
   const saveIssueAnnotation = async (category: string, description: string) => {
     if (!currentTask || !currentUser?.id) return;
     setIsIssueModalOpen(false);
 
-    let updatedAnnos: Annotation[];
+    setAnnotations(prev => {
+      let updated: Annotation[];
+      if (editingTextAnnotation) {
+        updated = prev.map(a => a.id === editingTextAnnotation.id ? {
+          ...a,
+          issueCategory: category,
+          issueDescription: description,
+          timestamp: Date.now()
+        } : a);
+      } else if (currentSelection) {
+        const newAnnotation: Annotation = {
+          id: generateUuid(),
+          ...currentSelection,
+          comment: '',
+          isImportant: false,
+          type: 'manual',
+          subtype: 'issue',
+          issueCategory: category,
+          issueDescription: description,
+          timestamp: Date.now(),
+          userEmail: currentUser?.email,
+          userId: currentUser.id,
+          taskId: currentTask.id,
+          submissionTaskId: currentTask.id,
+          submissionUserId: currentUser.id,
+        };
+        updated = [...prev, newAnnotation];
+      } else {
+        return prev;
+      }
 
-    if (editingTextAnnotation) {
-      updatedAnnos = annotations.map(a => a.id === editingTextAnnotation.id ? {
-        ...a,
-        issueCategory: category,
-        issueDescription: description,
-        timestamp: Date.now()
-      } : a);
-    } else if (currentSelection) {
-      const newAnnotation: Annotation = {
-        id: generateUuid(), // Use generated UUID
-        ...currentSelection,
-        comment: '',
-        isImportant: false,
-        type: 'manual',
-        subtype: 'issue',
-        issueCategory: category,
-        issueDescription: description,
-        timestamp: Date.now(),
-        userEmail: currentUser?.email,
-        userId: currentUser.id,
-        taskId: currentTask.id,
-        submissionTaskId: currentTask.id, // Set submission_task_id
-        submissionUserId: currentUser.id, // Set submission_user_id
-      };
-      updatedAnnos = [...annotations, newAnnotation];
-    } else {
-      return;
-    }
+      if (currentUser && currentTask) {
+        supabaseService.saveAnnotations(currentTask.id, currentUser.id, updated).catch(err => {
+          console.error('Error saving issue annotation:', err);
+        });
+      }
+      return updated;
+    });
 
-    setAnnotations(updatedAnnos);
     setCurrentSelection(null);
     setEditingTextAnnotation(null);
-
-    // Manual trigger save for immediate persistence
-    if (currentUser && currentTask) {
-      try {
-        await supabaseService.saveAnnotations(currentTask.id, currentUser.id, updatedAnnos);
-        if (!isMounted.current) return;
-        const updatedGlobalLog = await supabaseService.fetchAllAnnotations();
-        if (!isMounted.current) return;
-        setGlobalLog(updatedGlobalLog);
-      } catch (error) {
-        if (isMounted.current) console.error('Error saving issue annotation:', error);
-      }
-    }
   };
 
   const handleAddPin = (paraIdx: number, x: number, y: number, width: number, height: number, shapeType: ShapeType) => {
@@ -1409,22 +1508,21 @@ const App: React.FC = () => {
     const paraIdxKey = activeImageIdx.toString();
     setIsImageModalOpen(false);
 
-    const updatedImageAnnos = (imageAnnotations[paraIdxKey] || []).filter(a => a.id !== editingImageAnno.id);
-    const newImageAnnotationsState = { ...imageAnnotations, [paraIdxKey]: updatedImageAnnos };
-    
-    setImageAnnotations(newImageAnnotationsState);
+    setImageAnnotations(prev => {
+      const currentAnnos = prev[paraIdxKey] || [];
+      const updatedImageAnnos = currentAnnos.filter(a => a.id !== editingImageAnno.id);
+      const newState = { ...prev, [paraIdxKey]: updatedImageAnnos };
+      
+      if (currentTask && currentUser) {
+        supabaseService.saveImageAnnotations(currentTask.id, currentUser.id, newState).catch(err => {
+          console.error('Error deleting image annotation:', err);
+        });
+      }
+      return newState;
+    });
+
     setEditingImageAnno(null);
     setPendingPin(null);
-
-    try {
-      await supabaseService.saveImageAnnotations(currentTask.id, currentUser.id, newImageAnnotationsState);
-      if (!isMounted.current) return;
-      const updatedGlobalLog = await supabaseService.fetchAllAnnotations();
-      if (!isMounted.current) return;
-      setGlobalLog(updatedGlobalLog);
-    } catch (error) {
-      if (isMounted.current) console.error('Error deleting image annotation:', error);
-    }
   };
 
   const saveImageAnnotation = async (data: Omit<ImageAnnotation, 'id' | 'x' | 'y' | 'width' | 'height' | 'timestamp' | 'userId' | 'taskId' | 'userEmail' | 'paragraph_index' | 'submissionTaskId' | 'submissionUserId'> & { rating: number }) => {
@@ -1433,62 +1531,57 @@ const App: React.FC = () => {
     setIsImageModalOpen(false);
     setIsImageIssueModalOpen(false);
 
-    let updatedImageAnnos: ImageAnnotation[];
+    setImageAnnotations(prev => {
+      let updatedImageAnnos: ImageAnnotation[];
+      const currentListForPara = prev[paraIdxKey] || [];
 
-    if (editingImageAnno) {
-      updatedImageAnnos = (imageAnnotations[paraIdxKey] || []).map(a => a.id === editingImageAnno.id ? { ...a, ...data } : a);
-    } else if (pendingPin) {
-      const newAnno: ImageAnnotation = {
-        id: generateUuid(), // Use generated UUID
-        x: pendingPin.x,
-        y: pendingPin.y,
-        width: pendingPin.width,
-        height: pendingPin.height,
-        shapeType: pendingPin.shapeType,
-        timestamp: Date.now(),
-        userEmail: currentUser?.email,
-        userId: currentUser.id,
-        taskId: currentTask.id,
-        submissionTaskId: currentTask.id, // Set submission_task_id
-        submissionUserId: currentUser.id, // Set submission_user_id
-        paragraph_index: activeImageIdx,
-        // Provide default values for properties that might be omitted when creating an issue annotation
-        description: data.description || '',
-        comment: data.comment || '',
-        isPresent: data.isPresent || 'na',
-        presentJustification: data.presentJustification || '',
-        isRelevant: data.isRelevant || 'na',
-        relevantJustification: data.relevantJustification || '',
-        isSupported: data.isSupported || 'na',
-        supportedJustification: data.supportedJustification || '',
-        cultureProxy: data.cultureProxy || '',
-        subtype: data.subtype || 'culture',
-        issueCategory: data.issueCategory,
-        issueDescription: data.issueDescription,
-        rating: data.rating,
-      };
-      updatedImageAnnos = [...(imageAnnotations[paraIdxKey] || []), newAnno];
-    } else {
-      return;
-    }
+      if (editingImageAnno) {
+        updatedImageAnnos = currentListForPara.map(a => a.id === editingImageAnno.id ? { ...a, ...data } : a);
+      } else if (pendingPin) {
+        const newAnno: ImageAnnotation = {
+          id: generateUuid(),
+          x: pendingPin.x,
+          y: pendingPin.y,
+          width: pendingPin.width,
+          height: pendingPin.height,
+          shapeType: pendingPin.shapeType,
+          timestamp: Date.now(),
+          userEmail: currentUser?.email,
+          userId: currentUser.id,
+          taskId: currentTask.id,
+          submissionTaskId: currentTask.id,
+          submissionUserId: currentUser.id,
+          paragraph_index: activeImageIdx!,
+          description: data.description || '',
+          comment: data.comment || '',
+          isPresent: data.isPresent || 'na',
+          presentJustification: data.presentJustification || '',
+          isRelevant: data.isRelevant || 'na',
+          relevantJustification: data.relevantJustification || '',
+          isSupported: data.isSupported || 'na',
+          supportedJustification: data.supportedJustification || '',
+          cultureProxy: data.cultureProxy || '',
+          subtype: data.subtype || 'culture',
+          issueCategory: data.issueCategory,
+          issueDescription: data.issueDescription,
+          rating: data.rating,
+        };
+        updatedImageAnnos = [...currentListForPara, newAnno];
+      } else {
+        return prev;
+      }
 
-    const newImageAnnotationsState = { ...imageAnnotations, [paraIdxKey]: updatedImageAnnos };
-    setImageAnnotations(newImageAnnotationsState);
+      const newState = { ...prev, [paraIdxKey]: updatedImageAnnos };
+      if (currentTask && currentUser) {
+        supabaseService.saveImageAnnotations(currentTask.id, currentUser.id, newState).catch(err => {
+          console.error('Error saving image annotation:', err);
+        });
+      }
+      return newState;
+    });
+
     setEditingImageAnno(null);
     setPendingPin(null);
-
-    // Manual trigger save for immediate persistence
-    if (currentUser && currentTask) {
-      try {
-        await supabaseService.saveImageAnnotations(currentTask.id, currentUser.id, newImageAnnotationsState);
-        if (!isMounted.current) return;
-        const updatedGlobalLog = await supabaseService.fetchAllAnnotations();
-        if (!isMounted.current) return;
-        setGlobalLog(updatedGlobalLog);
-      } catch (error) {
-        if (isMounted.current) console.error('Error saving image annotation:', error);
-      }
-    }
   };
 
   const handleCommitTask = async () => {
@@ -1498,17 +1591,19 @@ const App: React.FC = () => {
     const validationErrors: string[] = [];
 
     paragraphs.forEach((para, idx) => {
-      // Check Text Connectedness
-      if (textConnectness[idx] !== '' || textConnectness[idx] !== '') {
-        const hasTextAnno = annotations.some(a => a.start >= para.offset && a.end <= para.offset + para.text.length);
+      // Check Text Connectedness using the REFS to avoid stale closure validation
+      const currentTextConn = textConnectnessRef.current[idx];
+      if (currentTextConn && currentTextConn !== '') {
+        const hasTextAnno = annotationsRef.current.some(a => a.start >= para.offset && a.end <= para.offset + para.text.length);
         if (!hasTextAnno) {
           validationErrors.push(`${t('paragraph_label', language)} #${idx + 1}`);
         }
       }
 
-      // Check Image Connectedness
-      if (imageConnectness[idx] !== '' || imageConnectness[idx] !== '') {
-        const hasImageAnno = imageAnnotations[idx.toString()] && imageAnnotations[idx.toString()].length > 0;
+      // Check Image Connectedness using the REFS
+      const currentImageConn = imageConnectnessRef.current[idx];
+      if (currentImageConn && currentImageConn !== '') {
+        const hasImageAnno = imageAnnotationsRef.current[idx.toString()] && imageAnnotationsRef.current[idx.toString()].length > 0;
         if (!hasImageAnno) {
           validationErrors.push(`Image #${idx + 1}`);
         }
@@ -2078,6 +2173,7 @@ const App: React.FC = () => {
                 onUpdateProject={updateProject}
                 onDeleteProject={deleteProject}
                 onAddTask={addTask}
+                onBulkAddTasks={bulkAddTasks}
                 onUpdateTask={updateTask}
                 onDeleteTask={deleteTask}
                 onInspectProject={(projectId) => {

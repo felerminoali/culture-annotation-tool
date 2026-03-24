@@ -433,6 +433,54 @@ export const createTask = async (task: Task): Promise<Task | null> => { // Chang
     };
 };
 
+export const bulkCreateTasks = async (tasksList: any[]): Promise<Task[]> => {
+    if (!supabase) throw new Error('Supabase not initialized');
+
+    const mappedTasks = tasksList.map(t => {
+        return {
+            id: isValidUuid(t.id) ? t.id : generateUuid(),
+            project_id: t.projectId || t.project_id || null,
+            title: t.title || '',
+            objective: t.objective || '',
+            description: t.description || '',
+            text: Array.isArray(t.paragraphs) ? t.paragraphs.join('\n\n') : (t.text || ''),
+            images: t.images || [],
+            audio: t.audio || [],
+            question: t.question || null,
+            category: t.category || null,
+            gender: t.gender || null,
+            task_type: t.taskType || t.task_type || 'independent',
+            metadata: t.metadata || {}
+        };
+    });
+
+    const { data, error } = await supabase
+        .from('tasks')
+        .upsert(mappedTasks, { onConflict: 'id' })
+        .select();
+
+    if (error) {
+        console.error('Error bulk creating tasks:', error);
+        throw error;
+    }
+
+    return (data || []).map(d => ({
+        id: d.id,
+        projectId: d.project_id,
+        title: d.title,
+        objective: d.objective || '',
+        description: d.description || '',
+        text: d.text,
+        images: d.images || [],
+        audio: d.audio || [],
+        question: d.question || '',
+        category: d.category,
+        gender: d.gender,
+        taskType: (d.task_type || 'independent') as any,
+        metadata: d.metadata || {}
+    }));
+};
+
 export const updateTask = async (id: string, updates: Partial<Task>) => {
     if (!supabase) throw new Error('Supabase not initialized');
 
@@ -545,46 +593,51 @@ export const saveTaskSubmission = async (
 
     const feedbackData = globalFeedback || {};
 
-    const { data, error } = await supabase
-        .from('task_submissions')
-        .upsert({
-            task_id: taskId,
-            user_id: userId,
-            cultural_score: culturalScore,
-            language_similarity: languageSimilarity,
-            language_similarity_justification: languageSimilarityJustification,
-            general_comment: generalComment,
-            text_connectness: textConnectness || {},
-            image_connectness: imageConnectness || {},
-            completed: completed,
-            health_safety: feedbackData.health_safety || false,
-            medically_misleading: feedbackData.medically_misleading || false,
-            culture_generic: feedbackData.culture_generic || false,
-            cultural_stereotypical: feedbackData.cultural_stereotypical || false,
-            persona_consistency_strong: feedbackData.persona_consistency_strong || false,
-            persona_consistency_broken: feedbackData.persona_consistency_broken || false,
-            advice_practical: feedbackData.advice_practical || false,
-            advice_vague: feedbackData.advice_vague || false,
-            advice_unrealistic: feedbackData.advice_unrealistic || false,
-            images_match_story: feedbackData.images_match_story || false,
-            images_mismatch_persona: feedbackData.images_mismatch_persona || false,
-            ai_artifacts: feedbackData.ai_artifacts || false,
-            story_engaging: feedbackData.story_engaging || false,
-            story_confusing: feedbackData.story_confusing || false,
-            story_supportive: feedbackData.story_supportive || false,
-            story_tone_inappropriate: feedbackData.story_tone_inappropriate || false,
-        }, {
-            onConflict: 'task_id,user_id' // Specify composite primary key for upsert
-        })
-        .select()
-        .single();
+    try {
+        const { data, error } = await supabase
+            .from('task_submissions')
+            .upsert({
+                task_id: taskId,
+                user_id: userId,
+                cultural_score: culturalScore,
+                language_similarity: languageSimilarity,
+                language_similarity_justification: languageSimilarityJustification,
+                general_comment: generalComment,
+                text_connectness: textConnectness || {},
+                image_connectness: imageConnectness || {},
+                completed: completed,
+                health_safety: feedbackData.health_safety || false,
+                medically_misleading: feedbackData.medically_misleading || false,
+                culture_generic: feedbackData.culture_generic || false,
+                cultural_stereotypical: feedbackData.cultural_stereotypical || false,
+                persona_consistency_strong: feedbackData.persona_consistency_strong || false,
+                persona_consistency_broken: feedbackData.persona_consistency_broken || false,
+                advice_practical: feedbackData.advice_practical || false,
+                advice_vague: feedbackData.advice_vague || false,
+                advice_unrealistic: feedbackData.advice_unrealistic || false,
+                images_match_story: feedbackData.images_match_story || false,
+                images_mismatch_persona: feedbackData.images_mismatch_persona || false,
+                ai_artifacts: feedbackData.ai_artifacts || false,
+                story_engaging: feedbackData.story_engaging || false,
+                story_confusing: feedbackData.story_confusing || false,
+                story_supportive: feedbackData.story_supportive || false,
+                story_tone_inappropriate: feedbackData.story_tone_inappropriate || false,
+            }, {
+                onConflict: 'task_id,user_id'
+            })
+            .select()
+            .single();
 
-    if (error) {
-        console.error('Error upserting task submission:', error);
-        throw error;
+        if (error) {
+            console.error('Error upserting task submission:', error);
+            throw error;
+        }
+
+        return { data, error: null };
+    } catch (err) {
+        console.error('Network Error in saveTaskSubmission:', err);
+        throw err;
     }
-
-    return { data, error: null };
 };
 
 export const fetchTaskSubmission = async (taskId: string, userId: string) => {
@@ -783,20 +836,10 @@ export const deleteTaskSubmission = async (taskId: string, userId: string) => {
 export const saveAnnotations = async (taskId: string, userId: string, annotations: Annotation[]) => {
     if (!supabase) throw new Error('Supabase not initialized');
 
-    // Delete existing annotations for this submission/task/user to avoid duplicates and handle updates simply
-    await supabase
-        .from('annotations')
-        .delete()
-        .eq('submission_task_id', taskId)
-        .eq('submission_user_id', userId);
-
-    if (annotations.length === 0) return { error: null };
-
-    // Insert new annotations
     const annotationsData = annotations.map(a => ({
-        id: ensureUuid(a.id), // Keep client-generated ID
-        submission_task_id: taskId, // Use task_id for submission_task_id
-        submission_user_id: userId, // Use userId for submission_user_id
+        id: ensureUuid(a.id),
+        submission_task_id: taskId,
+        submission_user_id: userId,
         task_id: taskId,
         user_id: userId,
         start_pos: a.start,
@@ -817,14 +860,43 @@ export const saveAnnotations = async (taskId: string, userId: string, annotation
         created_at: new Date(a.timestamp).toISOString(),
     }));
 
-    const { error } = await supabase
-        .from('annotations')
-        .upsert(annotationsData, { onConflict: 'id' });
-
-    if (error) {
-        console.error('Error upserting annotations:', error);
-        throw error;
+    // Step 1: Upsert all current annotations by ID (safe — never deletes everything at once)
+    if (annotationsData.length > 0) {
+        try {
+            const { error: upsertErr } = await supabase
+                .from('annotations')
+                .upsert(annotationsData, { onConflict: 'id' });
+            if (upsertErr) throw upsertErr;
+        } catch (err) {
+            console.error('Error upserting annotations:', err);
+            throw err; // Re-throw critical upsert error
+        }
     }
+
+    // Step 2: Delta-delete — remove only annotations that are no longer in the current list
+    try {
+        const { data: existing, error: fetchErr } = await supabase
+            .from('annotations')
+            .select('id')
+            .eq('submission_task_id', taskId)
+            .eq('submission_user_id', userId);
+
+        if (fetchErr) throw fetchErr;
+
+        const currentIds = new Set(annotationsData.map(a => a.id));
+        const toDelete = (existing || []).filter(a => !currentIds.has(a.id)).map(a => a.id);
+
+        if (toDelete.length > 0) {
+            const { error: deleteErr } = await supabase
+                .from('annotations')
+                .delete()
+                .in('id', toDelete);
+            if (deleteErr) console.warn('Non-critical: Error delta-deleting stale annotations:', deleteErr);
+        }
+    } catch (err) {
+        console.warn('Non-critical: Network issues during annotations delta-delete, will retry on next save:', err);
+    }
+
     return { error: null };
 };
 
@@ -1003,18 +1075,11 @@ export const deleteAnnotation = async (id: string) => {
 export const saveImageAnnotations = async (taskId: string, userId: string, imageAnnotations: Record<string, ImageAnnotation[]>) => {
     if (!supabase) throw new Error('Supabase not initialized');
 
-    // Delete existing image annotations for this submission/task/user
-    await supabase
-        .from('image_annotations')
-        .delete()
-        .eq('submission_task_id', taskId)
-        .eq('submission_user_id', userId);
-
     const flattenedImageAnnotations = Object.entries(imageAnnotations).flatMap(([paraIdx, annos]) =>
         annos.map(a => ({
             id: ensureUuid(a.id),
-            submission_task_id: taskId, // Use task_id for submission_task_id
-            submission_user_id: userId, // Use userId for submission_user_id
+            submission_task_id: taskId,
+            submission_user_id: userId,
             task_id: taskId,
             user_id: userId,
             paragraph_index: parseInt(paraIdx),
@@ -1040,16 +1105,43 @@ export const saveImageAnnotations = async (taskId: string, userId: string, image
         }))
     );
 
-    if (flattenedImageAnnotations.length === 0) return { error: null };
-
-    const { error } = await supabase
-        .from('image_annotations')
-        .insert(flattenedImageAnnotations);
-
-    if (error) {
-        console.error('Error inserting image annotations:', error);
-        throw error;
+    // Step 1: Upsert current image annotations
+    if (flattenedImageAnnotations.length > 0) {
+        try {
+            const { error: upsertErr } = await supabase
+                .from('image_annotations')
+                .upsert(flattenedImageAnnotations, { onConflict: 'id' });
+            if (upsertErr) throw upsertErr;
+        } catch (err) {
+            console.error('Error upserting image annotations:', err);
+            throw err;
+        }
     }
+
+    // Step 2: Delta-delete (resilient)
+    try {
+        const { data: existing, error: fetchErr } = await supabase
+            .from('image_annotations')
+            .select('id')
+            .eq('submission_task_id', taskId)
+            .eq('submission_user_id', userId);
+
+        if (fetchErr) throw fetchErr;
+
+        const currentIds = new Set(flattenedImageAnnotations.map(a => a.id));
+        const toDelete = (existing || []).filter(a => !currentIds.has(a.id)).map(a => a.id);
+
+        if (toDelete.length > 0) {
+            const { error: deleteErr } = await supabase
+                .from('image_annotations')
+                .delete()
+                .in('id', toDelete);
+            if (deleteErr) console.warn('Non-critical: Error delta-deleting stale image annotations:', deleteErr);
+        }
+    } catch (err) {
+        console.warn('Non-critical: Network issues during image annotations delta-delete, will retry on next save:', err);
+    }
+
     return { error: null };
 };
 
