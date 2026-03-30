@@ -2,13 +2,13 @@
 import React, { useState, useEffect } from 'react';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
-import { User, Annotation, TaskAssignment, Task, UserRole, Project, ProjectAssignment, DecisionStatus, Language, UserTaskSubmission } from '../types';
+import { User, Annotation, TaskAssignment, Task, UserRole, Project, ProjectAssignment, DecisionStatus, Language, UserTaskSubmission, ImageAnnotation } from '../types';
 import { t } from '../services/i18n';
 import { generateUuid } from '../services/supabaseService';
 
 
 interface AdminDashboardProps {
-  activeTab: 'users' | 'tasks' | 'annotations' | 'projects' | 'agreement';
+  activeTab: 'users' | 'tasks' | 'annotations' | 'score_annotations' | 'projects' | 'agreement';
   users: User[];
   allAnnotations: Annotation[];
   assignments: TaskAssignment[];
@@ -16,6 +16,7 @@ interface AdminDashboardProps {
   tasks: Task[];
   projects: Project[];
   allTaskSubmissions: UserTaskSubmission[]; // Prop to pass all user task submissions
+  allImageAnnotations: ImageAnnotation[];
   onAddUser: (user: User) => void;
   onDeleteUser: (email: string) => void;
   onUpdateRole: (email: string, role: UserRole) => void;
@@ -47,6 +48,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   tasks,
   projects,
   allTaskSubmissions, // Destructure new prop
+  allImageAnnotations,
   onAddUser,
   onDeleteUser,
   onUpdateRole,
@@ -192,6 +194,22 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           submission.completed
       );
       return userCompletedOverlappedTasks.length === overlappedTasks.length;
+    });
+  };
+
+  const getProjectUsers = (projectId: string) => {
+    if (!projectId) return [];
+    // Just return any user assigned to this project or any user who has annotations on this project
+    const projectTaskIds = tasks.filter(t => t.projectId === projectId).map(t => t.id);
+    const userEmailsWithAnnos = new Set([
+      ...allAnnotations.filter(a => projectTaskIds.includes(a.taskId!)).map(a => a.userEmail),
+      ...allImageAnnotations.filter(a => projectTaskIds.includes(a.taskId!)).map(a => a.userEmail),
+      ...allTaskSubmissions.filter(s => projectTaskIds.includes(s.taskId)).map(s => s.userEmail)
+    ]);
+
+    return users.filter(user => {
+      if (user.role !== 'annotator' && user.role !== 'admin') return false;
+      return userEmailsWithAnnos.has(user.email);
     });
   };
 
@@ -471,12 +489,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <h2 className="text-3xl font-black text-slate-900 italic tracking-tight">
             {activeTab === 'users' ? t('users_tab', language) :
               activeTab === 'tasks' ? t('tasks_tab', language) :
-                activeTab === 'projects' ? t('projects_tab', language) : t('ground_truth', language)}
+                activeTab === 'projects' ? t('projects_tab', language) :
+                  activeTab === 'annotations' ? t('annotations_tab', language) :
+                    activeTab === 'score_annotations' ? t('score_annotations_tab', language) : t('agreement_tab', language)}
           </h2>
           <p className="text-slate-400 font-medium text-sm mt-1 uppercase tracking-widest">
             {activeTab === 'users' ? t('users_tab', language) :
               activeTab === 'tasks' ? t('tasks_tab', language) :
-                activeTab === 'projects' ? t('projects_tab', language) : t('annotations_tab', language)}
+                activeTab === 'projects' ? t('projects_tab', language) :
+                  activeTab === 'annotations' ? t('annotations_tab', language) :
+                    activeTab === 'score_annotations' ? t('score_annotations_tab', language) : t('agreement_tab', language)}
           </p>
         </div>
 
@@ -888,6 +910,173 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
         {activeTab === 'annotations' && (
           <div className="space-y-10 animate-in slide-in-from-bottom-4">
+            <div className="bg-white rounded-[4rem] border border-slate-100 shadow-sm p-12 space-y-12">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                {/* Project Selection */}
+                <div className="space-y-6">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest px-4">{t('select_project', language)}</label>
+                  <select
+                    value={selectedAgrProject}
+                    onChange={(e) => {
+                      setSelectedAgrProject(e.target.value);
+                      setSelectedUsers([]);
+                      setAgreementResult(null);
+                    }}
+                    className="w-full bg-slate-50 border border-slate-100 rounded-[2rem] px-8 py-5 text-sm font-bold outline-none hover:border-indigo-300 focus:ring-4 focus:ring-indigo-50 transition-all appearance-none"
+                  >
+                    <option value="">{t('select_project', language)}...</option>
+                    {projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+                  </select>
+                </div>
+
+                {/* User Selection */}
+                <div className="space-y-6">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest px-4">{t('select_users', language)}</label>
+                  <div className="bg-slate-50 border border-slate-100 rounded-[2rem] p-6 max-h-[300px] overflow-y-auto space-y-3 no-scrollbar">
+                    {!selectedAgrProject ? (
+                      <p className="text-xs text-slate-400 italic p-4">{t('select_project', language)} first</p>
+                    ) : (
+                      <>
+                        {getProjectUsers(selectedAgrProject).length === 0 ? (
+                          <p className="text-xs text-slate-400 italic p-4">{t('no_findings', language)} for this project.</p>
+                        ) : (
+                          getProjectUsers(selectedAgrProject).map(user => (
+                            <label key={user.email} className={`flex items-center space-x-4 p-4 rounded-2xl cursor-pointer transition-all ${selectedUsers.includes(user.email) ? 'bg-indigo-600 text-white shadow-lg' : 'hover:bg-white hover:shadow-sm text-slate-600'}`}>
+                              <input
+                                type="checkbox"
+                                className="hidden"
+                                checked={selectedUsers.includes(user.email)}
+                                onChange={() => {
+                                  if (selectedUsers.includes(user.email)) {
+                                    setSelectedUsers(selectedUsers.filter(e => e !== user.email));
+                                  } else {
+                                    setSelectedUsers([...selectedUsers, user.email]);
+                                  }
+                                  setAgreementResult(null);
+                                }}
+                              />
+                              <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${selectedUsers.includes(user.email) ? 'border-white bg-white/20' : 'border-slate-200'}`}>
+                                {selectedUsers.includes(user.email) && <i className="fa-solid fa-check text-[10px]"></i>}
+                              </div>
+                              <span className="text-[11px] font-black uppercase tracking-widest">{user.name || user.email}</span>
+                            </label>
+                          ))
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* ANNOTATION COMPARISON TABLE */}
+              {selectedAgrProject && selectedUsers.length >= 2 && (
+                <div className="space-y-12 animate-in slide-in-from-top-8 pt-20 border-t border-slate-100 mt-20">
+                  <div className="text-center space-y-4">
+                    <h3 className="text-4xl font-black text-slate-900 italic tracking-tight">{t('annotation_comparison', language) || 'Annotation Comparison'}</h3>
+                    <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Comparing ratings across selected annotators for identical findings</p>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-[3.5rem] border border-slate-100 shadow-sm bg-white p-2">
+                    <table className="w-full text-left">
+                      <thead className="bg-slate-50/50 text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">
+                        <tr>
+                          <th className="py-8 px-10 min-w-[300px]">{t('annotation_content', language) || 'Annotation'}</th>
+                          <th className="py-8 px-10">{t('type', language)}</th>
+                          {selectedUsers.map(email => (
+                            <th key={email} className="py-8 px-10 text-center whitespace-nowrap">
+                              <span className="text-indigo-600 block mb-1">
+                                {users.find(u => u.email === email)?.name || email}
+                              </span>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50">
+                        {(() => {
+                          const taskIds = tasks.filter(t => t.projectId === selectedAgrProject).map(t => t.id);
+                          const textAnnos = allAnnotations.filter(a => taskIds.includes(a.taskId!) && selectedUsers.includes(a.userEmail!));
+                          const textGroups: Record<string, { label: string, type: string, ratings: Record<string, number> }> = {};
+                          
+                          textAnnos.forEach(a => {
+                            const key = `text-${a.taskId}-${a.start}-${a.end}-${a.subtype || 'culture'}`;
+                            if (!textGroups[key]) {
+                              textGroups[key] = {
+                                label: `[${a.taskId}] "${a.text}"`,
+                                type: a.subtype === 'issue' ? 'Text Issue' : 'Text Culture',
+                                ratings: {}
+                              };
+                            }
+                            textGroups[key].ratings[a.userEmail!] = a.rating || 0;
+                          });
+
+                          const imageAnnos = allImageAnnotations.filter(a => taskIds.includes(a.taskId!) && selectedUsers.includes(a.userEmail!));
+                          const imageGroups: Record<string, { label: string, type: string, ratings: Record<string, number> }> = {};
+                          
+                          imageAnnos.forEach(a => {
+                            const key = `image-${a.taskId}-${a.paragraph_index}-${a.x}-${a.y}-${a.width}-${a.height}-${a.subtype || 'culture'}`;
+                            if (!imageGroups[key]) {
+                              imageGroups[key] = {
+                                label: `[${a.taskId}] Image #${a.paragraph_index! + 1}: ${a.description || a.subtype}`,
+                                type: a.subtype === 'issue' ? 'Image Issue' : 'Image Culture',
+                                ratings: {}
+                              };
+                            }
+                            imageGroups[key].ratings[a.userEmail!] = a.rating || 0;
+                          });
+
+                          const allGroups = [...Object.values(textGroups), ...Object.values(imageGroups)];
+
+                          if (allGroups.length === 0) {
+                            return <tr><td colSpan={selectedUsers.length + 2} className="py-20 text-center text-slate-300 font-bold italic opacity-50">No comparable annotations found for current selection.</td></tr>;
+                          }
+
+                          return allGroups.map((group, idx) => (
+                            <tr key={idx} className="group hover:bg-slate-50/50 transition-all">
+                              <td className="py-8 px-10">
+                                <p className="font-bold text-slate-800 text-sm line-clamp-2 italic leading-relaxed">"{group.label}"</p>
+                              </td>
+                              <td className="py-8 px-10">
+                                <span className={`text-[9px] font-black uppercase px-3 py-1 rounded-lg border shadow-sm ${
+                                  group.type.includes('Issue') ? 'bg-red-50 text-red-600 border-red-100' : 'bg-indigo-50 text-indigo-600 border-indigo-100'
+                                }`}>
+                                  {group.type}
+                                </span>
+                              </td>
+                              {selectedUsers.map(email => {
+                                const rating = group.ratings[email];
+                                return (
+                                  <td key={email} className="py-8 px-10 text-center">
+                                    {rating !== undefined ? (
+                                      <div className="flex flex-col items-center">
+                                        <span className="text-xl font-black text-slate-900 mb-1">{rating}</span>
+                                        <div className="w-12 h-1 bg-slate-100 rounded-full overflow-hidden">
+                                          <div 
+                                            className={`h-full transition-all duration-500 ${rating >= 4 ? 'bg-emerald-400' : rating >= 3 ? 'bg-amber-400' : 'bg-rose-400'}`} 
+                                            style={{ width: `${(rating / 5) * 100}%` }}
+                                          ></div>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <span className="text-slate-200 text-xs font-black italic">N/A</span>
+                                    )}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ));
+                        })()}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="text-center space-y-4 pt-10">
+              <h3 className="text-3xl font-black text-slate-900 italic tracking-tight">{t('ground_truth_logs', language)}</h3>
+              <p className="text-slate-400 font-bold uppercase tracking-widest text-[9px]">Comprehensive log of all individual findings</p>
+            </div>
+
             <div className="overflow-x-auto rounded-[4rem] border border-slate-100 shadow-sm bg-white p-2">
               <table className="w-full text-left">
                 <thead className="bg-slate-50/50 text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">
@@ -1116,7 +1305,133 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             )}
           </div>
         )}
+
+        {activeTab === 'score_annotations' && (
+          <div className="space-y-12 animate-in fade-in slide-in-from-bottom-6 duration-700 p-10">
+            {/* Project & User Selection Filters */}
+            <div className="bg-white rounded-[4rem] border border-slate-100 shadow-sm p-12 space-y-12">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                {/* Project Selection */}
+                <div className="space-y-6">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest px-4">{t('select_project', language)}</label>
+                  <select
+                    value={selectedAgrProject}
+                    onChange={(e) => {
+                      setSelectedAgrProject(e.target.value);
+                      setSelectedUsers([]);
+                    }}
+                    className="w-full bg-slate-50 border border-slate-100 rounded-[2rem] px-8 py-5 text-sm font-bold outline-none hover:border-indigo-300 focus:ring-4 focus:ring-indigo-50 transition-all appearance-none"
+                  >
+                    <option value="">{t('select_project', language)}...</option>
+                    {projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+                  </select>
+                </div>
+
+                {/* User Selection */}
+                <div className="space-y-6">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest px-4">{t('select_users', language)}</label>
+                  <div className="bg-slate-50 border border-slate-100 rounded-[2rem] p-6 max-h-[300px] overflow-y-auto space-y-3 no-scrollbar">
+                    {!selectedAgrProject ? (
+                      <p className="text-xs text-slate-400 italic p-4">{t('select_project', language)} first</p>
+                    ) : (
+                      <>
+                        {getProjectUsers(selectedAgrProject).length === 0 ? (
+                          <p className="text-xs text-slate-400 italic p-4">{t('no_findings', language)} for this project.</p>
+                        ) : (
+                          getProjectUsers(selectedAgrProject).map(user => (
+                            <label key={user.email} className={`flex items-center space-x-4 p-4 rounded-2xl cursor-pointer transition-all ${selectedUsers.includes(user.email) ? 'bg-indigo-600 text-white shadow-lg' : 'hover:bg-white hover:shadow-sm text-slate-600'}`}>
+                              <input
+                                type="checkbox"
+                                className="hidden"
+                                checked={selectedUsers.includes(user.email)}
+                                onChange={() => {
+                                  if (selectedUsers.includes(user.email)) {
+                                    setSelectedUsers(selectedUsers.filter(e => e !== user.email));
+                                  } else {
+                                    setSelectedUsers([...selectedUsers, user.email]);
+                                  }
+                                }}
+                              />
+                              <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${selectedUsers.includes(user.email) ? 'border-white bg-white/20' : 'border-slate-200'}`}>
+                                {selectedUsers.includes(user.email) && <i className="fa-solid fa-check text-[10px]"></i>}
+                              </div>
+                              <span className="text-[11px] font-black uppercase tracking-widest">{user.name || user.email}</span>
+                            </label>
+                          ))
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Score Annotations Pivot Table */}
+            {selectedAgrProject && selectedUsers.length > 0 && (
+              <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden animate-in zoom-in duration-500">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead className="bg-slate-50/50 text-[8px] font-black text-slate-400 uppercase tracking-[0.2em]">
+                      <tr>
+                        <th className="py-4 px-6 min-w-[200px] border-b border-slate-100 sticky left-0 bg-slate-50/50 z-10">{t('tasks_tab', language)}</th>
+                        {selectedUsers.map(email => (
+                          <th key={email} className="py-4 px-4 text-center border-b border-slate-100 whitespace-nowrap min-w-[100px]">
+                            <span className="text-indigo-600 block mb-0.5">
+                              {users.find(u => u.email === email)?.name || email}
+                            </span>
+                            <span className="text-[7px] opacity-40 font-bold lowercase tracking-tight">{email}</span>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {tasks.filter(t => t.projectId === selectedAgrProject).map(task => (
+                        <tr key={task.id} className="group hover:bg-slate-50/30 transition-all">
+                          <td className="py-4 px-6 border-r border-slate-50 sticky left-0 bg-white group-hover:bg-slate-50/30 font-bold text-slate-800 italic text-[11px] z-10 shadow-[2px_0_4px_rgba(0,0,0,0.01)]">
+                            <span className="text-[7px] font-black text-slate-300 uppercase block mb-0.5 tracking-widest">{task.id}</span>
+                            <span className="line-clamp-1">{task.title}</span>
+                          </td>
+                          {selectedUsers.map(email => {
+                            const submission = allTaskSubmissions.find(s => s.taskId === task.id && s.userEmail === email);
+                            return (
+                              <td key={email} className="py-4 px-4 text-center">
+                                {submission ? (
+                                  <div className="flex flex-col items-center">
+                                    <span className="text-lg font-black text-slate-900 italic tracking-tighter leading-none mb-1">{submission.culturalScore}</span>
+                                    <span className={`px-2 py-0.5 rounded-md text-[7px] font-black uppercase tracking-widest ${submission.completed ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+                                      {submission.completed ? (t('completed', language) || 'Completed') : (t('draft', language) || 'Draft')}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-200 text-[10px] font-black italic opacity-30">N/A</span>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                      {tasks.filter(t => t.projectId === selectedAgrProject).length === 0 && (
+                        <tr>
+                          <td colSpan={selectedUsers.length + 1} className="py-20 text-center text-slate-300 text-lg font-black italic opacity-20">
+                            No tasks found for this project.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {!selectedAgrProject && (
+              <div className="py-40 text-center text-slate-300 text-3xl font-black italic opacity-20">
+                Select a project to view scores
+              </div>
+            )}
+          </div>
+        )}
       </div>
+
 
       {/* ANNOTATION EDIT MODAL */}
       {editingAnnoId && (

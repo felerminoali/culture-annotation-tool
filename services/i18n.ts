@@ -224,7 +224,8 @@ export const translations = {
         // Admin Dashboard
         users_tab: "Users",
         tasks_tab: "Tasks",
-        annotations_tab: "Findings",
+        annotations_tab: "Annotations",
+        score_annotations_tab: "Score Annotations",
         projects_tab: "Projects",
         add_user: "Add User",
         import_tasks: "Import Tasks",
@@ -259,6 +260,8 @@ export const translations = {
         research_id: "Persona ID",
         status_metrics: "Status Metrics",
         actions: "Actions",
+        completed: "Completed",
+        draft: "Draft",
         researcher_identity: 'Persona Identity',
         authorization: 'Authorization',
         agreement_tab: "Annotator Agreement",
@@ -298,6 +301,9 @@ export const translations = {
         workload_distribution: 'Workload Distribution',
         project_management: 'Project Management',
         ground_truth_logs: 'Ground Truth Logs',
+        annotation_comparison: 'Annotation Comparison',
+        annotation_content: 'Annotation',
+        type: 'Type',
 
         // Task Modal
         title: "Title", // New generic title for tasks
@@ -566,7 +572,8 @@ export const translations = {
         // Admin Dashboard
         users_tab: "Usuários",
         tasks_tab: "Tarefas",
-        annotations_tab: "Descobertas",
+        annotations_tab: "Anotações",
+        score_annotations_tab: "Pontuação de Anotações",
         projects_tab: "Projetos",
         add_user: "Adicionar Usuário",
         import_tasks: "Importar Tarefas",
@@ -601,6 +608,8 @@ export const translations = {
         research_id: "ID de Pesquisa",
         status_metrics: "Métricas de Status",
         actions: "Ações",
+        completed: "Concluído",
+        draft: "Rascunho",
         researcher_identity: 'Identidade do Pesquisador',
         authorization: 'Autorização',
         agreement_tab: "Concordância do Anotador",
@@ -640,6 +649,9 @@ export const translations = {
         workload_distribution: 'Distribuição de Carga',
         project_management: 'Gestão de Projetos',
         ground_truth_logs: 'Logs da Verdade Absoluta',
+        annotation_comparison: 'Comparação de Anotações',
+        annotation_content: 'Anotação',
+        type: 'Tipo',
 
         // Task Modal
         title: "Título", // New generic title for tasks

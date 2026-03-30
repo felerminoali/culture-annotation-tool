@@ -982,6 +982,50 @@ export const fetchAllAnnotations = async (): Promise<Annotation[]> => {
     }));
 };
 
+export const fetchAllImageAnnotations = async (): Promise<ImageAnnotation[]> => {
+    if (!supabase) return [];
+    const { data, error } = await supabase
+        .from('image_annotations')
+        .select(`
+            *,
+            users(email)
+        `);
+
+    if (error) {
+        console.error('Error fetching all image annotations:', error);
+        return [];
+    }
+
+    return (data || []).map(row => ({
+        id: row.id,
+        x: row.x,
+        y: row.y,
+        width: row.width,
+        height: row.height,
+        shapeType: row.shape_type,
+        description: row.description || '',
+        comment: row.comment || '',
+        isPresent: row.is_present || 'yes',
+        presentJustification: row.present_justification,
+        isRelevant: row.is_relevant || 'na',
+        relevantJustification: row.relevant_justification,
+        isSupported: row.is_supported || 'na',
+        supportedJustification: row.supported_justification,
+        cultureProxy: row.culture_proxy,
+        rating: row.rating,
+        subtype: row.subtype,
+        issueCategory: row.issue_category,
+        issueDescription: row.issue_description,
+        timestamp: new Date(row.created_at).getTime(),
+        userEmail: (row.users as any)?.email || row.user_id,
+        userId: row.user_id,
+        taskId: row.task_id,
+        submissionTaskId: row.submission_task_id,
+        submissionUserId: row.submission_user_id,
+        paragraph_index: row.paragraph_index
+    }));
+};
+
 export const fetchAnnotationsForTasks = async (taskIds: string[]): Promise<Annotation[]> => {
     if (!supabase) return [];
 

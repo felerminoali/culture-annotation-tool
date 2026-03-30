@@ -22,13 +22,14 @@ const App: React.FC = () => {
   const [isRegistering, setIsRegistering] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [viewMode, setViewMode] = useState<'workspace' | 'admin'>('workspace');
-  const [adminTab, setAdminTab] = useState<'users' | 'tasks' | 'annotations' | 'projects' | 'agreement'>('users');
+  const [adminTab, setAdminTab] = useState<'users' | 'tasks' | 'annotations' | 'score_annotations' | 'projects' | 'agreement'>('users');
   const [language, setLanguage] = useState<Language>('en');
 
   // Platform Resources
   const [users, setUsers] = useState<User[]>([]);
   const [assignments, setAssignments] = useState<TaskAssignment[]>([]);
   const [globalLog, setGlobalLog] = useState<Annotation[]>([]);
+  const [globalImageLog, setGlobalImageLog] = useState<ImageAnnotation[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projectAssignments, setProjectAssignments] = useState<ProjectAssignment[]>([]);
@@ -404,13 +405,14 @@ const App: React.FC = () => {
 
     const loadGlobalResources = async () => {
       try {
-        const [usersData, projectsData, tasksData, projectAssignmentsData, taskAssignmentsData, globalAnnotationsData, allSubmissionsData] = await Promise.all([
+        const [usersData, projectsData, tasksData, projectAssignmentsData, taskAssignmentsData, globalAnnotationsData, globalImageAnnotationsData, allSubmissionsData] = await Promise.all([
           supabaseService.fetchUsers(),
           supabaseService.fetchProjects(),
           supabaseService.fetchTasks(),
           supabaseService.fetchProjectAssignments(),
           supabaseService.fetchTaskAssignments(),
           supabaseService.fetchAllAnnotations(),
+          supabaseService.fetchAllImageAnnotations(),
           supabaseService.fetchAllUserTaskSubmissions()
         ]);
 
@@ -422,6 +424,7 @@ const App: React.FC = () => {
         setProjectAssignments(projectAssignmentsData);
         setAssignments(taskAssignmentsData);
         setGlobalLog(globalAnnotationsData);
+        setGlobalImageLog(globalImageAnnotationsData);
         setAllTaskSubmissions(allSubmissionsData);
         setSubmissionUpdateKey(prev => prev + 1); // Increment key after updating global submissions
 
@@ -1870,7 +1873,8 @@ const App: React.FC = () => {
                 <>
                   <button onClick={() => setAdminTab('users')} title="Users" className={`p-3 rounded-xl transition-all ${adminTab === 'users' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-50'}`}><i className="fa-solid fa-users"></i></button>
                   <button onClick={() => setAdminTab('tasks')} title="Tasks" className={`p-3 rounded-xl transition-all ${adminTab === 'tasks' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-50'}`}><i className="fa-solid fa-list-check"></i></button>
-                  <button onClick={() => setAdminTab('annotations')} title="Ground Truth" className={`p-3 rounded-xl transition-all ${adminTab === 'annotations' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-50'}`}><i className="fa-solid fa-database"></i></button>
+                  <button onClick={() => setAdminTab('annotations')} title={t('annotations_tab', language)} className={`p-3 rounded-xl transition-all ${adminTab === 'annotations' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-50'}`}><i className="fa-solid fa-database"></i></button>
+                  <button onClick={() => setAdminTab('score_annotations')} title={t('score_annotations_tab', language)} className={`p-3 rounded-xl transition-all ${adminTab === 'score_annotations' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-50'}`}><i className="fa-solid fa-star"></i></button>
                   <button onClick={() => setAdminTab('projects')} title="Projects" className={`p-3 rounded-xl transition-all ${adminTab === 'projects' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-50'}`}><i className="fa-solid fa-folder-open"></i></button>
                   <button onClick={() => setAdminTab('agreement')} title="Agreement" className={`p-3 rounded-xl transition-all ${adminTab === 'agreement' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-50'}`}><i className="fa-solid fa-users-viewfinder"></i></button>
                 </>
@@ -1901,6 +1905,9 @@ const App: React.FC = () => {
                   </button>
                   <button onClick={() => setAdminTab('annotations')} className={`w-full flex items-center px-4 py-3.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${adminTab === 'annotations' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}>
                     <i className="fa-solid fa-database mr-3 text-sm"></i> {t('annotations_tab', language)}
+                  </button>
+                  <button onClick={() => setAdminTab('score_annotations')} className={`w-full flex items-center px-4 py-3.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${adminTab === 'score_annotations' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}>
+                    <i className="fa-solid fa-star mr-3 text-sm"></i> {t('score_annotations_tab', language)}
                   </button>
                   <button onClick={() => setAdminTab('projects')} className={`w-full flex items-center px-4 py-3.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${adminTab === 'projects' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}>
                     <i className="fa-solid fa-folder-open mr-3 text-sm"></i> {t('projects_tab', language)}
@@ -2105,7 +2112,9 @@ const App: React.FC = () => {
               <h2 className="text-xl font-black text-slate-900 italic tracking-tight truncate max-w-md">
                 {adminTab === 'users' ? t('user_registry', language) :
                   adminTab === 'tasks' ? t('workload_distribution', language) :
-                    adminTab === 'projects' ? t('project_management', language) : t('ground_truth_logs', language)}
+                  adminTab === 'projects' ? t('project_management', language) :
+                  adminTab === 'annotations' ? t('annotations_tab', language) :
+                  adminTab === 'score_annotations' ? t('score_annotations_tab', language) : t('agreement_tab', language)}
               </h2>
             )}
           </div>
@@ -2161,6 +2170,7 @@ const App: React.FC = () => {
                 tasks={tasks}
                 projects={projects}
                 allTaskSubmissions={allTaskSubmissions} // Pass all submissions for agreement calculation
+                allImageAnnotations={globalImageLog}
                 onAddUser={addUser}
                 onDeleteUser={deleteUser}
                 onUpdateRole={updateRole}
