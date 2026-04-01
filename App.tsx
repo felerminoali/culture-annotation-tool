@@ -94,6 +94,8 @@ const App: React.FC = () => {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [adminProjectFilter, setAdminProjectFilter] = useState<string | null>(null);
+  const [inspectUserId, setInspectUserId] = useState<string | null>(null); // For Admin to inspect specific user work
+  const [loadError, setLoadError] = useState<string | null>(null); // To show if data failed to load
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   // Audio State (Refactored to native HTML audio element, no more complex decoding)
@@ -483,12 +485,14 @@ const App: React.FC = () => {
 
     const loadTaskData = async () => {
       isLoadingTaskData.current = true; // Block auto-save while loading
+      setLoadError(null);
       try {
+        const fetchUserId = inspectUserId || currentUser.id!;
         const [completedIds, annotationsData, imageAnnotationsData, submission] = await Promise.all([
-          supabaseService.fetchCompletedTaskIds(currentUser.id!),
-          supabaseService.fetchAnnotations(currentTask.id, currentUser.id!),
-          supabaseService.fetchImageAnnotations(currentTask.id, currentUser.id!),
-          supabaseService.fetchTaskSubmission(currentTask.id, currentUser.id!)
+          supabaseService.fetchCompletedTaskIds(fetchUserId),
+          supabaseService.fetchAnnotations(currentTask.id, fetchUserId),
+          supabaseService.fetchImageAnnotations(currentTask.id, fetchUserId),
+          supabaseService.fetchTaskSubmission(currentTask.id, fetchUserId)
         ]);
 
         if (!isMounted.current) return;
@@ -546,21 +550,18 @@ const App: React.FC = () => {
             story_tone_inappropriate: false,
           });
         }
+        isLoadingTaskData.current = false; // Re-enable auto-save ONLY on success
       } catch (error) {
         if (!isMounted.current) return;
         console.error('Error loading task data:', error);
-        setAnnotations([]);
-        setImageAnnotations({});
-        setCulturalScore(0);
-        setLanguageSimilarity('na');
-        setLanguageSimilarityJustification('');
-      } finally {
-        isLoadingTaskData.current = false; // Re-enable auto-save
+        setLoadError('Failed to load annotations. Please refresh to try again. Auto-save is disabled to prevent data loss.');
+        // IMPORTANT: We do NOT set isLoadingTaskData.current to false here.
+        // This keeps auto-save blocked so we don't overwrite DB with empty/wrong state.
       }
     };
 
     loadTaskData();
-  }, [isAuthenticated, currentUser, currentTask?.id]);
+  }, [isAuthenticated, currentUser, currentTask?.id, inspectUserId]); // Re-load when inspecting a specific user
 
   // Debounced auto-save.
   // IMPORTANT: Does NOT save when isLoadingTaskData is true (prevents delta-delete
@@ -1425,7 +1426,7 @@ const App: React.FC = () => {
 
       // Immediate DB save
       if (currentUser && currentTask) {
-        supabaseService.saveAnnotations(currentTask.id, currentUser.id, updated).catch(err => {
+        supabaseService.saveAnnotations(currentTask.id, currentUser.id, updated, { skipDeltaDelete: true }).catch(err => {
           console.error('Error saving text annotation:', err);
         });
       }
@@ -1472,7 +1473,7 @@ const App: React.FC = () => {
       }
 
       if (currentUser && currentTask) {
-        supabaseService.saveAnnotations(currentTask.id, currentUser.id, updated).catch(err => {
+        supabaseService.saveAnnotations(currentTask.id, currentUser.id, updated, { skipDeltaDelete: true }).catch(err => {
           console.error('Error saving issue annotation:', err);
         });
       }
@@ -1743,7 +1744,7 @@ const App: React.FC = () => {
         const updated = [...prev, ...filtered];
         // Trigger save after AI suggestions
         if (currentUser && currentTask) {
-          supabaseService.saveAnnotations(currentTask.id, currentUser.id, updated);
+          supabaseService.saveAnnotations(currentTask.id, currentUser.id, updated, { skipDeltaDelete: true });
         }
         return updated;
       });
@@ -2194,6 +2195,14 @@ const App: React.FC = () => {
                 }}
                 onExportProject={handleExportProject}
                 onImportProject={handleImportProject}
+                onInspectUser={(userId, taskId) => {
+                  setInspectUserId(userId);
+                  if (taskId) {
+                    const idx = visibleTasks.findIndex(t => t.id === taskId);
+                    if (idx !== -1) setCurrentTaskIndex(idx);
+                  }
+                  setViewMode('workspace');
+                }}
                 onClose={() => setViewMode('workspace')}
                 language={language}
               />
@@ -2221,6 +2230,44 @@ const App: React.FC = () => {
                 </div>
               ) : (
                 <>
+                  {loadError && (
+                    <div className="bg-red-50 border border-red-100 p-8 rounded-[2rem] flex items-center space-x-6 animate-in slide-in-from-top-4 mb-12 shadow-sm">
+                      <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center text-red-600 shrink-0">
+                        <i className="fa-solid fa-triangle-exclamation text-xl"></i>
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-red-900 font-black italic text-lg leading-tight">{loadError}</p>
+                        <p className="text-red-400 text-xs font-bold mt-1 uppercase tracking-widest">Database connection failed during handshake</p>
+                      </div>
+                      <button onClick={() => window.location.reload()} className="px-6 py-3 bg-red-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-700 transition-all shadow-lg active:scale-95">
+                        {t('refresh', language)}
+                      </button>
+                    </div>
+                  )}
+
+                  {inspectUserId && (
+                    <div className="bg-amber-50 border border-amber-100 p-8 rounded-[2rem] flex items-center justify-between animate-in slide-in-from-top-4 mb-12 shadow-sm">
+                      <div className="flex items-center space-x-6">
+                        <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center text-amber-600 shrink-0">
+                          <i className="fa-solid fa-user-secret text-xl"></i>
+                        </div>
+                        <div>
+                          <p className="text-amber-900 font-black italic text-lg leading-tight">Admin Review Mode Active</p>
+                          <p className="text-amber-400 text-xs font-bold mt-1 uppercase tracking-widest">Inspecting work for user: {inspectUserId}</p>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => {
+                          setInspectUserId(null);
+                          setViewMode('admin');
+                        }} 
+                        className="px-6 py-3 bg-amber-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-amber-700 transition-all shadow-lg active:scale-95"
+                      >
+                        Exit Review
+                      </button>
+                    </div>
+                  )}
+
                   <div className="space-y-32">
                     {paragraphs.map((para, idx) => (
                       <div key={idx} className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-start">

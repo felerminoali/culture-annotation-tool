@@ -19,12 +19,28 @@ const TextDisplay: React.FC<TextDisplayProps> = ({ content, annotations, onSelec
     const selectedText = selection.toString().trim();
     if (selectedText.length === 0) return;
 
-    // Logic to calculate offsets relative to the container
-    const start = content.indexOf(selectedText);
-    if (start !== -1) {
+    const range = selection.getRangeAt(0);
+    const container = containerRef.current;
+    if (!container || !container.contains(range.startContainer)) return;
+
+    // Use the Range API to compute the true offset relative to the container,
+    // instead of indexOf which always returns the first occurrence.
+    const preRange = document.createRange();
+    preRange.selectNodeContents(container);
+    preRange.setEnd(range.startContainer, range.startOffset);
+    const preText = preRange.toString();
+
+    // Account for leading whitespace that .trim() removed
+    const fullSelectedText = selection.toString();
+    const leadingTrimmed = fullSelectedText.length - fullSelectedText.trimStart().length;
+
+    const start = preText.length + leadingTrimmed;
+    const end = start + selectedText.length;
+
+    if (start >= 0 && end <= content.length) {
       onSelect({
         start,
-        end: start + selectedText.length,
+        end,
         text: selectedText
       });
     }

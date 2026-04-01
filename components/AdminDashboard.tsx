@@ -36,6 +36,7 @@ interface AdminDashboardProps {
   onExportProject: (projectId: string) => void;
   onImportProject: (file: File) => void;
   onClose: () => void;
+  onInspectUser?: (userId: string, taskId?: string) => void;
   language: Language;
 }
 
@@ -68,6 +69,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onExportProject,
   onImportProject,
   onClose,
+  onInspectUser,
   language
 }) => {
   // User Management
@@ -732,9 +734,20 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                     {completionPercentage}%
                                   </span>
                                 </div>
-                                <button onClick={() => onRemoveProjectAssignment(project.id, member.email)} className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover/tag:opacity-100">
-                                  <i className="fa-solid fa-times-circle"></i>
-                                </button>
+                                <div className="flex items-center space-x-2">
+                                  {onInspectUser && (
+                                    <button 
+                                      onClick={() => onInspectUser(member.id!, undefined)} // undefined taskId defaults to project's first visible task
+                                      className="text-indigo-300 hover:text-indigo-600 transition-colors opacity-0 group-hover/tag:opacity-100"
+                                      title="Inspect User Work"
+                                    >
+                                      <i className="fa-solid fa-eye"></i>
+                                    </button>
+                                  )}
+                                  <button onClick={() => onRemoveProjectAssignment(project.id, member.email)} className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover/tag:opacity-100">
+                                    <i className="fa-solid fa-times-circle"></i>
+                                  </button>
+                                </div>
                               </div>
                             );
                           })}
@@ -1128,7 +1141,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </div>
                         </td>
                         <td className="py-10 px-14 text-right">
-                          <div className="flex justify-end space-x-4 opacity-0 group-hover:opacity-100 transition-all">
+                          <div className="flex justify-end space-x-4 opacity-0 group/actions transition-all group-hover:opacity-100">
+                            {onInspectUser && (
+                              <button
+                                onClick={() => onInspectUser(anno.userId, anno.taskId)}
+                                className="w-16 h-16 bg-indigo-50 text-indigo-600 border border-indigo-100 hover:bg-indigo-600 hover:text-white rounded-[1.5rem] transition-all shadow-sm flex items-center justify-center active:scale-90"
+                                title="Inspect in Workspace"
+                              >
+                                <i className="fa-solid fa-eye text-xl"></i>
+                              </button>
+                            )}
                             <button
                               onClick={() => handleEditAnno(anno)}
                               className="w-16 h-16 bg-white border border-slate-100 text-slate-700 hover:bg-indigo-600 hover:text-white rounded-[1.5rem] transition-all shadow-sm flex items-center justify-center active:scale-90"
@@ -1394,13 +1416,22 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           {selectedUsers.map(email => {
                             const submission = allTaskSubmissions.find(s => s.taskId === task.id && s.userEmail === email);
                             return (
-                              <td key={email} className="py-4 px-4 text-center">
+                              <td key={email} className="py-4 px-4 text-center group/cell">
                                 {submission ? (
-                                  <div className="flex flex-col items-center">
+                                  <div className="flex flex-col items-center relative">
                                     <span className="text-lg font-black text-slate-900 italic tracking-tighter leading-none mb-1">{submission.culturalScore}</span>
                                     <span className={`px-2 py-0.5 rounded-md text-[7px] font-black uppercase tracking-widest ${submission.completed ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
                                       {submission.completed ? (t('completed', language) || 'Completed') : (t('draft', language) || 'Draft')}
                                     </span>
+                                    {onInspectUser && (
+                                      <button 
+                                        onClick={() => onInspectUser(submission.userId, submission.taskId)}
+                                        className="absolute -top-2 -right-2 w-8 h-8 bg-indigo-600 text-white rounded-full opacity-0 group-hover/cell:opacity-100 transition-all flex items-center justify-center shadow-lg active:scale-90 scale-75 group-hover/cell:scale-100"
+                                        title="Inspect this submission"
+                                      >
+                                        <i className="fa-solid fa-eye text-[10px]"></i>
+                                      </button>
+                                    )}
                                   </div>
                                 ) : (
                                   <span className="text-slate-200 text-[10px] font-black italic opacity-30">N/A</span>

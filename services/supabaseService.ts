@@ -833,7 +833,7 @@ export const deleteTaskSubmission = async (taskId: string, userId: string) => {
 // ANNOTATIONS
 // ============================================
 
-export const saveAnnotations = async (taskId: string, userId: string, annotations: Annotation[]) => {
+export const saveAnnotations = async (taskId: string, userId: string, annotations: Annotation[], options?: { skipDeltaDelete?: boolean }) => {
     if (!supabase) throw new Error('Supabase not initialized');
 
     const annotationsData = annotations.map(a => ({
@@ -874,6 +874,10 @@ export const saveAnnotations = async (taskId: string, userId: string, annotation
     }
 
     // Step 2: Delta-delete — remove only annotations that are no longer in the current list
+    // Skipped for inline (fire-and-forget) saves to avoid race conditions;
+    // the debounced auto-save handles cleanup safely.
+    if (options?.skipDeltaDelete) return { error: null };
+
     try {
         const { data: existing, error: fetchErr } = await supabase
             .from('annotations')
@@ -912,7 +916,7 @@ export const fetchAnnotations = async (taskId: string, userId: string): Promise<
 
     if (error) {
         console.error('Error fetching annotations:', error);
-        return [];
+        throw error; // Throw so caller knows it failed
     }
 
     return data.map(a => ({
@@ -1254,7 +1258,7 @@ export const fetchImageAnnotations = async (taskId: string, userId: string): Pro
 
     if (error) {
         console.error('Error fetching image annotations:', error);
-        return {};
+        throw error; // Throw so caller knows it failed
     }
 
     const grouped: Record<string, ImageAnnotation[]> = {};
