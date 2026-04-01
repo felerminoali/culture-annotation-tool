@@ -96,6 +96,7 @@ const App: React.FC = () => {
   const [adminProjectFilter, setAdminProjectFilter] = useState<string | null>(null);
   const [inspectUserId, setInspectUserId] = useState<string | null>(null); // For Admin to inspect specific user work
   const [loadError, setLoadError] = useState<string | null>(null); // To show if data failed to load
+  const lastLoadedTaskId = useRef<string | null>(null); // To prevent stale auto-save across task navigation
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   // Audio State (Refactored to native HTML audio element, no more complex decoding)
@@ -486,6 +487,13 @@ const App: React.FC = () => {
     const loadTaskData = async () => {
       isLoadingTaskData.current = true; // Block auto-save while loading
       setLoadError(null);
+      // WIPE old task state to prevent stale data being visible or accidentally saved
+      setAnnotations([]);
+      setImageAnnotations({});
+      setCulturalScore(0);
+      setLanguageSimilarity('na');
+      setLanguageSimilarityJustification('');
+
       try {
         const fetchUserId = inspectUserId || currentUser.id!;
         const [completedIds, annotationsData, imageAnnotationsData, submission] = await Promise.all([
@@ -550,6 +558,7 @@ const App: React.FC = () => {
             story_tone_inappropriate: false,
           });
         }
+        lastLoadedTaskId.current = currentTask.id; // Mark this task as successfully loaded
         isLoadingTaskData.current = false; // Re-enable auto-save ONLY on success
       } catch (error) {
         if (!isMounted.current) return;
@@ -561,6 +570,10 @@ const App: React.FC = () => {
     };
 
     loadTaskData();
+    return () => {
+      // Optional: Clear highlights when task changes to avoid flash of old content
+      // setAnnotations([]); 
+    };
   }, [isAuthenticated, currentUser, currentTask?.id, inspectUserId]); // Re-load when inspecting a specific user
 
   // Debounced auto-save.
@@ -573,9 +586,13 @@ const App: React.FC = () => {
 
     const timer = setTimeout(async () => {
       if (!isMounted.current) return;
-      // Block if task data is still being loaded from DB — saving now would
-      // write stale/empty state and the delta-delete would wipe real data.
-      if (isLoadingTaskData.current) return;
+      // CRITICAL: Block if task data is still being loaded, OR if the current task
+      // is different from the one that was successfully loaded last.
+      // This prevents stale closure data from one task being saved into another task's ID.
+      if (isLoadingTaskData.current || lastLoadedTaskId.current !== currentTask.id) {
+        console.warn('Auto-save blocked: Data is stale or still loading');
+        return;
+      }
 
       // Read `completed` from ref so its change never itself triggers this effect.
       const isCompleted = completedTaskIdsRef.current.includes(currentTask.id);
