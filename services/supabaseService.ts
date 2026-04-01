@@ -1120,7 +1120,7 @@ export const deleteAnnotation = async (id: string) => {
 // IMAGE ANNOTATIONS
 // ============================================
 
-export const saveImageAnnotations = async (taskId: string, userId: string, imageAnnotations: Record<string, ImageAnnotation[]>) => {
+export const saveImageAnnotations = async (taskId: string, userId: string, imageAnnotations: Record<string, ImageAnnotation[]>, options?: { skipDeltaDelete?: boolean }) => {
     if (!supabase) throw new Error('Supabase not initialized');
 
     const flattenedImageAnnotations = Object.entries(imageAnnotations).flatMap(([paraIdx, annos]) =>
@@ -1166,7 +1166,10 @@ export const saveImageAnnotations = async (taskId: string, userId: string, image
         }
     }
 
-    // Step 2: Delta-delete (resilient)
+    // Step 2: Delta-delete — skipped for inline (fire-and-forget) saves to avoid
+    // race conditions; the debounced auto-save handles cleanup safely.
+    if (options?.skipDeltaDelete) return { error: null };
+
     try {
         const { data: existing, error: fetchErr } = await supabase
             .from('image_annotations')

@@ -96,6 +96,7 @@ const App: React.FC = () => {
   const [adminProjectFilter, setAdminProjectFilter] = useState<string | null>(null);
   const [inspectUserId, setInspectUserId] = useState<string | null>(null); // For Admin to inspect specific user work
   const [loadError, setLoadError] = useState<string | null>(null); // To show if data failed to load
+  const [isTaskLoading, setIsTaskLoading] = useState(false); // Reactive flag to disable nav buttons during load
   const lastLoadedTaskId = useRef<string | null>(null); // To prevent stale auto-save across task navigation
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
@@ -145,6 +146,9 @@ const App: React.FC = () => {
   // Without this guard, the auto-save fires with empty annotations during page load
   // and the delta-delete wipes all existing annotations from the DB.
   const isLoadingTaskData = useRef(false);
+
+  // Guard against double-click race conditions on Next/Prev buttons.
+  const isNavigating = useRef(false);
 
 
   // Filter TASKS based on assignment if not admin
@@ -486,6 +490,7 @@ const App: React.FC = () => {
 
     const loadTaskData = async () => {
       isLoadingTaskData.current = true; // Block auto-save while loading
+      setIsTaskLoading(true);
       setLoadError(null);
       // WIPE old task state to prevent stale data being visible or accidentally saved
       setAnnotations([]);
@@ -493,6 +498,27 @@ const App: React.FC = () => {
       setCulturalScore(0);
       setLanguageSimilarity('na');
       setLanguageSimilarityJustification('');
+      setGeneralComment('');
+      setTextConnectness({});
+      setImageConnectness({});
+      setGlobalFeedback({
+        health_safety: false,
+        medically_misleading: false,
+        culture_generic: false,
+        cultural_stereotypical: false,
+        persona_consistency_strong: false,
+        persona_consistency_broken: false,
+        advice_practical: false,
+        advice_vague: false,
+        advice_unrealistic: false,
+        images_match_story: false,
+        images_mismatch_persona: false,
+        ai_artifacts: false,
+        story_engaging: false,
+        story_confusing: false,
+        story_supportive: false,
+        story_tone_inappropriate: false,
+      });
 
       try {
         const fetchUserId = inspectUserId || currentUser.id!;
@@ -513,6 +539,7 @@ const App: React.FC = () => {
           setCulturalScore(submission.cultural_score || 0);
           setLanguageSimilarity(submission.language_similarity || 'na');
           setLanguageSimilarityJustification(submission.language_similarity_justification || '');
+          setGeneralComment(submission.general_comment || '');
           setTextConnectness(submission.text_connectness || {});
           setImageConnectness(submission.image_connectness || {});
           setGlobalFeedback({
@@ -541,6 +568,7 @@ const App: React.FC = () => {
           setTextConnectness({});
           setImageConnectness({});
           setGlobalFeedback({
+            health_safety: false,
             medically_misleading: false,
             culture_generic: false,
             cultural_stereotypical: false,
@@ -559,7 +587,12 @@ const App: React.FC = () => {
           });
         }
         lastLoadedTaskId.current = currentTask.id; // Mark this task as successfully loaded
-        isLoadingTaskData.current = false; // Re-enable auto-save ONLY on success
+        // NOTE: isLoadingTaskData.current is cleared by a dedicated useEffect
+        // that runs AFTER React commits the state batch above. Setting it here
+        // synchronously would create a race window where the auto-save timer
+        // (from the empty-state render) could fire before effects clean it up,
+        // saving empty annotations with delta-delete and wiping the DB.
+        setIsTaskLoading(false);
       } catch (error) {
         if (!isMounted.current) return;
         console.error('Error loading task data:', error);
@@ -630,6 +663,15 @@ const App: React.FC = () => {
   }, [annotations, imageAnnotations, culturalScore, languageSimilarity,
       languageSimilarityJustification, generalComment, textConnectness,
       imageConnectness, globalFeedback, isAuthenticated, currentUser, currentTask?.id]);
+
+  // Clear the isLoadingTaskData guard AFTER React has committed the data
+  // state batch. Declared AFTER the auto-save effect so it runs AFTER the
+  // auto-save cleanup has cleared any stale timers from the empty-state render.
+  useEffect(() => {
+    if (!isTaskLoading && isLoadingTaskData.current) {
+      isLoadingTaskData.current = false;
+    }
+  }, [isTaskLoading]);
 
   useEffect(() => {
     localStorage.setItem('annotate_language', language);
@@ -1294,8 +1336,19 @@ const App: React.FC = () => {
 
   // Helper: flush all current task data to the DB using refs so we always
   // capture the LATEST state even when called from inside a stale closure.
+  // GUARD: Skip flush if task data is still loading (refs contain empty/stale
+  // state) or if the task being flushed doesn't match the last successfully
+  // loaded task — saving in either case would delta-delete real data from DB.
   const flushCurrentTaskToDb = useCallback(async (task: typeof currentTask, user: typeof currentUser) => {
     if (!task || !user) return;
+    if (isLoadingTaskData.current) {
+      console.warn('flushCurrentTaskToDb skipped: task data is still loading');
+      return;
+    }
+    if (lastLoadedTaskId.current !== task.id) {
+      console.warn('flushCurrentTaskToDb skipped: task id mismatch (stale data)');
+      return;
+    }
     const isCompleted = completedTaskIdsRef.current.includes(task.id);
     await Promise.all([
       supabaseService.saveAnnotations(task.id, user.id, annotationsRef.current),
@@ -1315,28 +1368,36 @@ const App: React.FC = () => {
   }, []); // No deps — reads from refs only
 
   const nextTask = async () => {
-    stopAudio();
-    // AWAIT the save so that loadTaskData for the next task does not overwrite
-    // in-flight data from the previous task (race condition fix).
-    if (currentUser && currentTask) {
-      await flushCurrentTaskToDb(currentTask, currentUser).catch(console.error);
-    }
-    if (currentTaskIndex < visibleTasks.length - 1) {
-      setCurrentTaskIndex(currentTaskIndex + 1);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (isNavigating.current || isLoadingTaskData.current) return;
+    isNavigating.current = true;
+    try {
+      stopAudio();
+      if (currentUser && currentTask) {
+        await flushCurrentTaskToDb(currentTask, currentUser).catch(console.error);
+      }
+      if (currentTaskIndex < visibleTasks.length - 1) {
+        setCurrentTaskIndex(currentTaskIndex + 1);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    } finally {
+      isNavigating.current = false;
     }
   };
 
   const prevTask = async () => {
-    stopAudio();
-    // AWAIT the save so that loadTaskData for the previous task does not
-    // overwrite in-flight data (race condition fix).
-    if (currentUser && currentTask) {
-      await flushCurrentTaskToDb(currentTask, currentUser).catch(console.error);
-    }
-    if (currentTaskIndex > 0) {
-      setCurrentTaskIndex(currentTaskIndex - 1);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (isNavigating.current || isLoadingTaskData.current) return;
+    isNavigating.current = true;
+    try {
+      stopAudio();
+      if (currentUser && currentTask) {
+        await flushCurrentTaskToDb(currentTask, currentUser).catch(console.error);
+      }
+      if (currentTaskIndex > 0) {
+        setCurrentTaskIndex(currentTaskIndex - 1);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    } finally {
+      isNavigating.current = false;
     }
   };
 
@@ -1594,7 +1655,7 @@ const App: React.FC = () => {
 
       const newState = { ...prev, [paraIdxKey]: updatedImageAnnos };
       if (currentTask && currentUser) {
-        supabaseService.saveImageAnnotations(currentTask.id, currentUser.id, newState).catch(err => {
+        supabaseService.saveImageAnnotations(currentTask.id, currentUser.id, newState, { skipDeltaDelete: true }).catch(err => {
           console.error('Error saving image annotation:', err);
         });
       }
@@ -2142,7 +2203,7 @@ const App: React.FC = () => {
               <div className="flex items-center space-x-2">
                 <button
                   onClick={prevTask}
-                  disabled={currentTaskIndex === 0}
+                  disabled={currentTaskIndex === 0 || isTaskLoading}
                   className="w-10 h-10 bg-white border border-slate-100 rounded-xl hover:bg-slate-50 transition-all disabled:opacity-20 flex items-center justify-center text-slate-600"
                 >
                   <i className="fa-solid fa-chevron-left text-sm"></i>
@@ -2153,6 +2214,7 @@ const App: React.FC = () => {
                 <button
                   onClick={nextTask}
                   disabled={
+                    isTaskLoading ||
                     currentTaskIndex === visibleTasks.length - 1 ||
                     (
                       currentUser.role !== 'admin' &&
