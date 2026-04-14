@@ -836,6 +836,13 @@ export const deleteTaskSubmission = async (taskId: string, userId: string) => {
 export const saveAnnotations = async (taskId: string, userId: string, annotations: Annotation[], options?: { skipDeltaDelete?: boolean }) => {
     if (!supabase) throw new Error('Supabase not initialized');
 
+    // Cross-contamination guard
+    const crossContaminated = annotations.filter(a => a.taskId && a.taskId !== taskId);
+    if (crossContaminated.length > 0) {
+        console.error('Data Leakage Blocked:', crossContaminated);
+        throw new Error(`Data safety block: Prevented saving annotations from task ${crossContaminated[0].taskId} onto current task ${taskId}. Please refresh.`);
+    }
+
     const annotationsData = annotations.map(a => ({
         id: ensureUuid(a.id),
         submission_task_id: taskId,
@@ -1122,6 +1129,14 @@ export const deleteAnnotation = async (id: string) => {
 
 export const saveImageAnnotations = async (taskId: string, userId: string, imageAnnotations: Record<string, ImageAnnotation[]>, options?: { skipDeltaDelete?: boolean }) => {
     if (!supabase) throw new Error('Supabase not initialized');
+
+    // Cross-contamination guard
+    const allAnnos = Object.values(imageAnnotations).flat();
+    const crossContaminated = allAnnos.filter(a => a.taskId && a.taskId !== taskId);
+    if (crossContaminated.length > 0) {
+         console.error('Data Leakage Blocked:', crossContaminated);
+         throw new Error(`Data safety block: Prevented saving image annotations from task ${crossContaminated[0].taskId} onto current task ${taskId}. Please refresh.`);
+    }
 
     const flattenedImageAnnotations = Object.entries(imageAnnotations).flatMap(([paraIdx, annos]) =>
         annos.map(a => ({
