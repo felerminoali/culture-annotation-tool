@@ -128,6 +128,9 @@ const App: React.FC = () => {
 
   // Track Unsaved Changes
   const initialLoadRef = useRef(true);
+  // Suppresses the unsaved-changes watcher for one render cycle after a successful submit,
+  // preventing the race where setShowResubmitSuccess(false) re-triggers the watcher.
+  const isJustSubmitted = useRef(false);
   useEffect(() => {
     if (isTaskLoading || isLoadingTaskData.current) {
       initialLoadRef.current = true;
@@ -136,6 +139,10 @@ const App: React.FC = () => {
     }
     if (initialLoadRef.current) {
       initialLoadRef.current = false;
+      return;
+    }
+    if (isJustSubmitted.current) {
+      isJustSubmitted.current = false;
       return;
     }
     setHasUnsavedChanges(true);
@@ -220,6 +227,64 @@ const App: React.FC = () => {
     });
     return result;
   }, [currentTask]);
+
+  // Map each annotation to exactly ONE paragraph by finding its true global
+  // occurrence in the full task text, and finding which paragraph bounds it.
+  // This solves offset drift and "cross-paragraph" duplicates simultaneously.
+  const annotationParagraphMap = useMemo(() => {
+    const map = new Map<string, number>();
+    if (!currentTask || paragraphs.length === 0) return map;
+    
+    const fullText = currentTask.text;
+
+    annotations.forEach(a => {
+      if (!a.text) return; // Skip invalid
+
+      // Find all global occurrences
+      const candidates: number[] = [];
+      let searchIdx = 0;
+      while (searchIdx < fullText.length) {
+        const found = fullText.indexOf(a.text, searchIdx);
+        if (found === -1) break;
+        candidates.push(found);
+        searchIdx = found + 1;
+      }
+
+      if (candidates.length === 0) return;
+
+      // Find the one closest to stored DB offset
+      const bestGlobalStart = candidates.reduce((best, pos) => 
+        Math.abs(pos - a.start) < Math.abs(best - a.start) ? pos : best
+      );
+
+      // Which paragraph contains this best global start?
+      let bestIdx = -1;
+      for (let i = 0; i < paragraphs.length; i++) {
+        const p = paragraphs[i];
+        if (bestGlobalStart >= p.offset && bestGlobalStart <= p.offset + p.text.length) {
+          bestIdx = i;
+          break;
+        }
+      }
+
+      // If it falls in a trailing space/newline gap, assign to closest paragraph
+      if (bestIdx === -1) {
+        let minDiff = Infinity;
+        for (let i = 0; i < paragraphs.length; i++) {
+          const p = paragraphs[i];
+          const pCenter = p.offset + p.text.length / 2;
+          const diff = Math.abs(bestGlobalStart - pCenter);
+          if (diff < minDiff) { 
+             minDiff = diff; 
+             bestIdx = i; 
+          }
+        }
+      }
+      
+      map.set(a.id, bestIdx);
+    });
+    return map;
+  }, [annotations, paragraphs, currentTask]);
 
   const ConnectednessButtons = ({ type, index, state, setState, annotationsCount }: { type: 'text' | 'image', index: number, state: Record<number, string>, setState: React.Dispatch<React.SetStateAction<Record<number, string>>>, annotationsCount: number }) => {
     const value = state[index] || '';
@@ -1309,7 +1374,13 @@ const App: React.FC = () => {
   const handleSelect = (s: SelectionState) => {
     // Read-only in admin inspect mode — never allow new annotations to be created
     if (inspectUserId) return;
-    const overlaps = annotations.some(a => (s.start >= a.start && s.start < a.end) || (s.end > a.start && s.end <= a.end));
+
+    // Overlap check: use offset-based detection but with a small tolerance,
+    // since stored DB offsets can drift slightly from rendered positions.
+    // A true overlap means the ranges intersect (not just touch at boundaries).
+    const overlaps = annotations.some(a =>
+      s.start < a.end && s.end > a.start
+    );
     if (!overlaps) {
       setEditingTextAnnotation(null);
       // Clear any pending image selection state to prevent conflicts
@@ -1622,13 +1693,19 @@ const App: React.FC = () => {
 
       setShowResubmitSuccess(true);
       setHasUnsavedChanges(false);
+      // Arm the just-submitted guard so the watcher ignores the state churn
+      // caused by setShowResubmitSuccess(false) 1200ms later.
+      isJustSubmitted.current = true;
       setTimeout(() => {
         if (!isMounted.current) return;
         setShowResubmitSuccess(false);
         if (currentTaskIndex < visibleTasks.length - 1) {
-          nextTask();
+          // Navigate directly — data is already saved, no guard needed.
+          stopAudio();
+          setCurrentTaskIndex(currentTaskIndex + 1);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
         } else {
-          setIsReviewingCompleted(true); // If all tasks are completed, show completion message
+          setIsReviewingCompleted(true);
         }
       }, 1200);
     } catch (error) {
@@ -2261,12 +2338,10 @@ const App: React.FC = () => {
                           </div>
                           <TextDisplay
                             content={para.text}
+                            paragraphOffset={para.offset}
                             annotations={annotations
                               // Only guard against cross-task contamination via taskId.
-                              // Do NOT filter by offset — annotations with historically wrong
-                              // offsets would be excluded, preventing correct dynamic text matching.
-                              // TextDisplay's indexOf-based matching decides what belongs here.
-                              .filter(a => !a.taskId || a.taskId === currentTask.id)
+                              .filter(a => (!a.taskId || a.taskId === currentTask.id) && annotationParagraphMap.get(a.id) === idx)
                             }
                             onSelect={s => {
                               // Translate paragraph-local offsets to global task-text offsets.

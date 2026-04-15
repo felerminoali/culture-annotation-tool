@@ -5,14 +5,26 @@ import { Annotation, SelectionState } from '../types';
 interface TextDisplayProps {
   content: string;
   annotations: Annotation[];
+  paragraphOffset: number;
   onSelect: (selection: SelectionState) => void;
   onEditAnnotation: (annotation: Annotation) => void;
 }
 
-const TextDisplay: React.FC<TextDisplayProps> = ({ content, annotations, onSelect, onEditAnnotation }) => {
+const TextDisplay: React.FC<TextDisplayProps> = ({ content, annotations, paragraphOffset, onSelect, onEditAnnotation }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  // Track whether the mouse drag started inside our container.
+  // This is more reliable than checking range.startContainer on mouseup,
+  // because startContainer can be a deep text node inside a highlight span.
+  const dragStartedInside = useRef(false);
+
+  const handleMouseDown = () => {
+    dragStartedInside.current = true;
+  };
 
   const handleMouseUp = () => {
+    if (!dragStartedInside.current) return;
+    dragStartedInside.current = false;
+
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) return;
 
@@ -21,10 +33,12 @@ const TextDisplay: React.FC<TextDisplayProps> = ({ content, annotations, onSelec
 
     const range = selection.getRangeAt(0);
     const container = containerRef.current;
-    if (!container || !container.contains(range.startContainer)) return;
+    // Use commonAncestorContainer so selections that span highlight <span>
+    // elements (whose text nodes are children, not the container itself) are
+    // still correctly attributed to our container.
+    if (!container || !container.contains(range.commonAncestorContainer)) return;
 
-    // Use the Range API to compute the true offset relative to the container,
-    // instead of indexOf which always returns the first occurrence.
+    // Use the Range API to compute the true offset relative to the container.
     const preRange = document.createRange();
     preRange.selectNodeContents(container);
     preRange.setEnd(range.startContainer, range.startOffset);
@@ -37,22 +51,21 @@ const TextDisplay: React.FC<TextDisplayProps> = ({ content, annotations, onSelec
     const start = preText.length + leadingTrimmed;
     const end = start + selectedText.length;
 
-    if (start >= 0 && end <= content.length) {
-      onSelect({
-        start,
-        end,
-        text: selectedText
-      });
-    }
-
-    // Clear browser selection so the modal can handle it
+    // Clear browser selection before opening modal to avoid stale range state
     selection.removeAllRanges();
+
+    // Removed the `end <= content.length` guard: the Range API offset is
+    // reliable; the old guard caused false negatives at paragraph boundaries.
+    if (start >= 0 && end > start) {
+      onSelect({ start, end, text: selectedText });
+    }
   };
 
   const renderContent = () => {
     if (annotations.length === 0) return content;
 
-    // Sort annotations by stored start offset as an ordering hint
+    // App.tsx guarantees that the annotations passed here belong to this paragraph.
+    // We sort them by stored start offset to process left-to-right.
     const sortedAnnotations = [...annotations].sort((a, b) => a.start - b.start);
 
     const parts: React.ReactNode[] = [];
@@ -61,17 +74,34 @@ const TextDisplay: React.FC<TextDisplayProps> = ({ content, annotations, onSelec
     sortedAnnotations.forEach((anno) => {
       if (!anno.text) return;
 
-      // --- Dynamic text-based matching ---
-      // Instead of trusting stored start/end (which may have been saved with wrong offsets),
-      // search for the annotation text in the content starting from lastIndex.
-      // This auto-corrects any historical offset drift for all existing annotations.
-      let actualStart = content.indexOf(anno.text, lastIndex);
-
-      if (actualStart === -1) {
-        // Not found from lastIndex — try a case-insensitive or broader search as fallback
-        // (e.g., the paragraph may have been slightly edited). Skip if still not found.
-        return;
+      // --- Proximity-based matching ---
+      // Collect ALL occurrences of anno.text in the full content, then pick the one
+      // whose position is closest to the stored DB offset (anno.start).
+      // This avoids false matches (e.g., "tea" inside "team") because the stored
+      // offset acts as a gravity signal pointing to the intended occurrence,
+      // even when offsets have drifted slightly due to past edits.
+      const candidates: number[] = [];
+      let searchIdx = 0;
+      while (searchIdx < content.length) {
+        const found = content.indexOf(anno.text, searchIdx);
+        if (found === -1) break;
+        candidates.push(found);
+        searchIdx = found + 1; // step by 1 to catch all (including overlapping) occurrences
       }
+
+      if (candidates.length === 0) return;
+
+      // Only consider positions that haven't already been rendered
+      const validCandidates = candidates.filter(pos => pos >= lastIndex);
+      if (validCandidates.length === 0) return;
+
+      // Pick the valid candidate whose start is closest to the stored offset.
+      // anno.start is a global offset; subtract paragraphOffset to compare in
+      // local paragraph coordinates (where candidates are 0-based).
+      const localAnnoStart = anno.start - paragraphOffset;
+      const actualStart = validCandidates.reduce((best, pos) =>
+        Math.abs(pos - localAnnoStart) < Math.abs(best - localAnnoStart) ? pos : best
+      );
 
       const actualEnd = actualStart + anno.text.length;
 
@@ -89,8 +119,11 @@ const TextDisplay: React.FC<TextDisplayProps> = ({ content, annotations, onSelec
             ? 'border-red-500 bg-red-50 hover:bg-red-100'
             : anno.isImportant ? 'border-amber-500 bg-amber-50 hover:bg-amber-100' : 'border-indigo-500 bg-indigo-50 hover:bg-indigo-100'
             }`}
-          onClick={(e) => {
-            e.stopPropagation();
+          onClick={() => {
+            // Only open the edit modal if the user clicked (no text selected).
+            // If they dragged to select text, handleMouseUp on the container will fire instead.
+            const sel = window.getSelection();
+            if (sel && sel.toString().trim().length > 0) return;
             onEditAnnotation(anno);
           }}
         >
@@ -117,6 +150,7 @@ const TextDisplay: React.FC<TextDisplayProps> = ({ content, annotations, onSelec
     <div className="relative">
       <div
         ref={containerRef}
+        onMouseDown={handleMouseDown}
         onMouseUp={handleMouseUp}
         className="prose prose-blue max-w-none text-gray-800 leading-relaxed text-lg whitespace-pre-wrap select-text p-8 bg-white rounded-xl shadow-sm border border-gray-100 min-h-[400px]"
       >
