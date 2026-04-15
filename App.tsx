@@ -664,7 +664,7 @@ const App: React.FC = () => {
       // Optional: Clear highlights when task changes to avoid flash of old content
       // setAnnotations([]); 
     };
-  }, [isAuthenticated, currentUser, currentTask?.id, inspectUserId]); // Re-load when inspecting a specific user
+  }, [isAuthenticated, currentUser?.id, currentTask?.id, inspectUserId]); // Re-load when inspecting a specific user
 
   // Clear the isLoadingTaskData guard once loading is done so nav buttons re-enable.
   useEffect(() => {

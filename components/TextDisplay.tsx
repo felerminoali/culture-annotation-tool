@@ -38,17 +38,45 @@ const TextDisplay: React.FC<TextDisplayProps> = ({ content, annotations, paragra
     // still correctly attributed to our container.
     if (!container || !container.contains(range.commonAncestorContainer)) return;
 
-    // Use the Range API to compute the true offset relative to the container.
-    const preRange = document.createRange();
-    preRange.selectNodeContents(container);
-    preRange.setEnd(range.startContainer, range.startOffset);
-    const preText = preRange.toString();
+    // Compute true offset by traversing DOM and skipping tooltip elements
+    const computeOffset = (root: Node, targetNode: Node, targetOffset: number): number => {
+      let currentOffset = 0;
+      let targetFound = false;
+
+      const traverse = (node: Node) => {
+        if (targetFound) return;
+        
+        if (node.nodeType === Node.ELEMENT_NODE && (node as Element).classList?.contains('annotation-tooltip')) {
+          return; // Skip tooltips
+        }
+
+        if (node === targetNode) {
+          currentOffset += targetOffset;
+          targetFound = true;
+          return;
+        }
+
+        if (node.nodeType === Node.TEXT_NODE) {
+          currentOffset += node.textContent?.length || 0;
+        } else {
+          for (let i = 0; i < node.childNodes.length; i++) {
+            traverse(node.childNodes[i]);
+            if (targetFound) return;
+          }
+        }
+      };
+
+      traverse(root);
+      return currentOffset;
+    };
+
+    const preTextLength = computeOffset(container, range.startContainer, range.startOffset);
 
     // Account for leading whitespace that .trim() removed
     const fullSelectedText = selection.toString();
     const leadingTrimmed = fullSelectedText.length - fullSelectedText.trimStart().length;
 
-    const start = preText.length + leadingTrimmed;
+    const start = preTextLength + leadingTrimmed;
     const end = start + selectedText.length;
 
     // Clear browser selection before opening modal to avoid stale range state
@@ -128,7 +156,7 @@ const TextDisplay: React.FC<TextDisplayProps> = ({ content, annotations, paragra
           }}
         >
           {content.slice(actualStart, actualEnd)}
-          <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-gray-900 text-white text-[10px] py-1 px-2 rounded whitespace-nowrap z-50 shadow-xl border border-gray-700">
+          <span className="annotation-tooltip absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-gray-900 text-white text-[10px] py-1 px-2 rounded whitespace-nowrap z-50 shadow-xl border border-gray-700">
             <i className={`fa-solid ${isIssue ? 'fa-circle-exclamation' : 'fa-pen-to-square'} mr-1 opacity-70`}></i>
             {isIssue ? `${anno.issueCategory}: ${anno.issueDescription}` : (anno.comment || "Click to edit")}
           </span>
