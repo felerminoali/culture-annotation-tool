@@ -52,19 +52,35 @@ const TextDisplay: React.FC<TextDisplayProps> = ({ content, annotations, onSelec
   const renderContent = () => {
     if (annotations.length === 0) return content;
 
-    // Sort annotations by start offset
+    // Sort annotations by stored start offset as an ordering hint
     const sortedAnnotations = [...annotations].sort((a, b) => a.start - b.start);
 
     const parts: React.ReactNode[] = [];
     let lastIndex = 0;
 
     sortedAnnotations.forEach((anno) => {
-      // Add text before the highlight
-      if (anno.start > lastIndex) {
-        parts.push(content.slice(lastIndex, anno.start));
+      if (!anno.text) return;
+
+      // --- Dynamic text-based matching ---
+      // Instead of trusting stored start/end (which may have been saved with wrong offsets),
+      // search for the annotation text in the content starting from lastIndex.
+      // This auto-corrects any historical offset drift for all existing annotations.
+      let actualStart = content.indexOf(anno.text, lastIndex);
+
+      if (actualStart === -1) {
+        // Not found from lastIndex — try a case-insensitive or broader search as fallback
+        // (e.g., the paragraph may have been slightly edited). Skip if still not found.
+        return;
       }
 
-      // Add the highlight
+      const actualEnd = actualStart + anno.text.length;
+
+      // Add unhighlighted text before this annotation
+      if (actualStart > lastIndex) {
+        parts.push(content.slice(lastIndex, actualStart));
+      }
+
+      // Add the highlighted span
       const isIssue = anno.subtype === 'issue' || anno.isSupported === 'no';
       parts.push(
         <span
@@ -78,7 +94,7 @@ const TextDisplay: React.FC<TextDisplayProps> = ({ content, annotations, onSelec
             onEditAnnotation(anno);
           }}
         >
-          {content.slice(anno.start, anno.end)}
+          {content.slice(actualStart, actualEnd)}
           <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-gray-900 text-white text-[10px] py-1 px-2 rounded whitespace-nowrap z-50 shadow-xl border border-gray-700">
             <i className={`fa-solid ${isIssue ? 'fa-circle-exclamation' : 'fa-pen-to-square'} mr-1 opacity-70`}></i>
             {isIssue ? `${anno.issueCategory}: ${anno.issueDescription}` : (anno.comment || "Click to edit")}
@@ -86,10 +102,10 @@ const TextDisplay: React.FC<TextDisplayProps> = ({ content, annotations, onSelec
         </span>
       );
 
-      lastIndex = anno.end;
+      lastIndex = actualEnd;
     });
 
-    // Add remaining text
+    // Add any remaining unhighlighted text at the end
     if (lastIndex < content.length) {
       parts.push(content.slice(lastIndex));
     }

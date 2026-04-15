@@ -2262,21 +2262,25 @@ const App: React.FC = () => {
                           <TextDisplay
                             content={para.text}
                             annotations={annotations
-                              .filter(a => a.start >= para.offset && a.end <= para.offset + para.text.length)
-                              .map(a => ({ ...a, start: a.start - para.offset, end: a.end - para.offset }))
+                              // Only guard against cross-task contamination via taskId.
+                              // Do NOT filter by offset — annotations with historically wrong
+                              // offsets would be excluded, preventing correct dynamic text matching.
+                              // TextDisplay's indexOf-based matching decides what belongs here.
+                              .filter(a => !a.taskId || a.taskId === currentTask.id)
                             }
                             onSelect={s => {
-                              const globalStart = para.offset + s.start;
-                              handleSelect({ ...s, start: globalStart, end: globalStart + s.text.length });
+                              // Translate paragraph-local offsets to global task-text offsets.
+                              // Use s.end directly (not s.text.length) to avoid drift from trimming.
+                              handleSelect({ ...s, start: para.offset + s.start, end: para.offset + s.end });
                             }}
-                            onEditAnnotation={a => handleEditHighlight({ ...a, start: a.start + para.offset, end: a.end + para.offset })}
+                            onEditAnnotation={a => handleEditHighlight(a)}
                           />
                           <ConnectednessButtons
                             type="text"
                             index={idx}
                             state={textConnectness}
                             setState={setTextConnectness}
-                            annotationsCount={annotations.filter(a => a.start >= para.offset && a.end <= para.offset + para.text.length).length}
+                            annotationsCount={annotations.filter(a => (!a.taskId || a.taskId === currentTask.id) && a.text && para.text.includes(a.text)).length}
                           />
                         </div>
 
